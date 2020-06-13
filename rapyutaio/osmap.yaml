@@ -13,14 +13,14 @@
 # os_family: Debian
 Ubuntu:
   pkg:
-    name: TEMPLATE-ubuntu
-  config: /etc/TEMPLATE.d/custom-ubuntu.conf
+    name: rapyutaio-ubuntu
+  config: /etc/rapyutaio.d/custom-ubuntu.conf
 Raspbian: {}
 
 # os_family: RedHat
 Fedora:
   pkg:
-    name: TEMPLATE-fedora
+    name: rapyutaio-fedora
   service:
     name: service-fedora
 CentOS: {}

@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 # vim: ft=yaml
 ---
-TEMPLATE:
+rapyutaio:
   pkg:
-    name: TEMPLATE
+    name: rapyutaio
   rootgroup: root
-  config: '/etc/TEMPLATE'
+  config: '/etc/rapyutaio'
   service:
-    name: TEMPLATE
+    name: rapyutaio
   subcomponent:
-    config: '/etc/TEMPLATE-subcomponent-formula.conf'
+    config: '/etc/rapyutaio-subcomponent-formula.conf'
   # Just here for testing
   added_in_defaults: defaults_value
   winner: defaults

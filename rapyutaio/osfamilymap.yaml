@@ -12,23 +12,23 @@
 ---
 Debian:
   pkg:
-    name: TEMPLATE-debian
-  config: /etc/TEMPLATE.d/custom.conf
+    name: rapyutaio-debian
+  config: /etc/rapyutaio.d/custom.conf
 
 RedHat:
   pkg:
-    name: TEMPLATE-redhat
-  config: /etc/TEMPLATE.conf
+    name: rapyutaio-redhat
+  config: /etc/rapyutaio.conf
 
 Suse:
   pkg:
-    name: TEMPLATE-suse
+    name: rapyutaio-suse
 
 Gentoo: {}
 
 Arch:
   pkg:
-    name: TEMPLATE-arch
+    name: rapyutaio-arch
   service:
     name: service-arch
 
