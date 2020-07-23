@@ -128,11 +128,8 @@ def package_present(name,
 		old_manifest = _get_existing_manifest(new_manifest['name'], new_manifest['packageVersion'])
 
 		if old_manifest:
-			# diff = __utils__['dictdiffer.deep_diff'](old_manifest, new_manifest)
-			# ret['changes'] = diff
-
-			diff = __utils__['dictdiffer.recursive_diff'](old_manifest, new_manifest)
-			ret['changes'] = diff.diffs
+			diff = __utils__['data.recursive_diff'](old_manifest, new_manifest)
+			ret['changes'] = diff
 
 
 			if ret['changes']:
