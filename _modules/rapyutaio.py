@@ -225,20 +225,21 @@ def delete_package(package_uid,
 	log.debug(response)
 
 	if 'error' in response:
-		return {"result": False, "message": response['error']}
+		return {
+			"result": False,
+			"status": response['status'],
+			"message": response['error'],
+		}
 
-	return response
-
-	try:
-		response['body'] = salt.utils.json.loads(response['body'])
-		return response
-	except JSONDecodeError as e:
-		return {"result": False, "message": e}
+	return {
+		"result": True,
+		"status": response['status'],
+		"message": "",
+	}
 
 
 
-def create_or_update_package(name,
-                             source=None,
+def create_or_update_package(source=None,
                              content=None,
                              project_id=None,
                              auth_token=None,
@@ -264,14 +265,27 @@ def create_or_update_package(name,
 		else:
 			file_name = __salt__["cp.cache_file"](source)
 
-			if os.path.exists(file_name):
+			if file_name is not False:
 				with salt.utils.files.fopen(file_name, "r") as _f:
-					content = salt.utils.json.load(_f)
-			else:
-				log.error('File "%s" does not exist', file_name)
-				return {"result": False, "message": 'File "{}" does not exist'.format(file_name)}
+					file_name_part, file_extension = os.path.splitext(file_name)
 
-	content['name'] = name
+					log.debug(file_extension)
+
+					if file_extension == '.json':
+						new_manifest = salt.utils.json.load(_f)
+					elif file_extension in ['.yaml', '.yml']:
+						new_manifest = salt.utils.yaml.load(_f)
+					else:
+						return {
+							"result": False,
+							"message": "Source file must be a JSON (.json) or YAML (.yaml, .yml) file"
+						}
+			else:
+				log.error("File '%s' does not exist", file_name)
+				return {
+					"result": False,
+					"message": "File '{}' does not exist".format(file_name)
+				}
 
 	response = salt.utils.http.query(url=url,
 	                                 header_dict=header_dict,
@@ -288,7 +302,7 @@ def create_or_update_package(name,
 		}
 
 	try:
-		response['body'] = salt.utils.json.loads(response['body'])
+		response['changes'] = salt.utils.json.loads(response['body'])
 		response['result'] = True
 		return response
 	except JSONDecodeError as e:

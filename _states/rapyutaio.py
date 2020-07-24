@@ -105,43 +105,74 @@ def package_present(name,
 	}
 
 	#
+	# Get the content of the new manifest
+	#
+	if content is None:
+		file_name = __salt__["cp.cache_file"](source)
+
+		if file_name is not False:
+			with salt.utils.files.fopen(file_name, "r") as _f:
+				file_name_part, file_extension = os.path.splitext(file_name)
+
+				log.debug(file_extension)
+
+				if file_extension == '.json':
+					new_manifest = salt.utils.json.load(_f)
+				elif file_extension in ['.yaml', '.yml']:
+					new_manifest = salt.utils.yaml.load(_f)
+				else:
+					ret['comment'] = "Manifest source must be a JSON (.json) or YAML (.yaml, .yml) file"
+					ret['result'] = False
+					return ret
+		else:
+			ret['comment'] = "Source file '{}' missing".format(source)
+			ret['result'] = False
+			return ret
+	else:
+		new_manifest = content
+
+	man_name = new_manifest['name']
+	man_version = new_manifest['packageVersion']
+
+	#
+	# Fetch the existing/old manifest if it exists
+	#
+	try:
+		old_package_info = __salt__['rapyutaio.get_packages'](name=man_name,
+		                                                      version=man_version)[0]
+	except IndexError as e:
+		# There is no existing package with that name and version
+		old_manifest = None
+	else:
+		old_manifest = __salt__['rapyutaio.get_manifest'](old_package_info['id'])
+		old_package_uid = old_package_info['id']
+
+	if old_manifest is not None:
+		# Is the new manifest different to the old
+		ret['changes'] = __utils__['data.recursive_diff'](old_manifest, new_manifest)
+
+		if not ret['changes']:
+			# The manifest is already in the correct state so return immediately
+			ret['result'] = True
+			ret['comment'] = "Package '{} {}' is in the correct state".format(man_name, man_version)
+			ret['changes'] = {}
+			return ret
+
+	#
 	# Find out what changes would be made
 	#
 	if __opts__['test']:
 		# Always return a None result for dry-runs
 		ret['result'] = None
 
-		# Get the content of the new manifest
-		if content is None:
-			file_name = __salt__["cp.cache_file"](source)
-
-			if os.path.exists(file_name):
-				with salt.utils.files.fopen(file_name, "r") as _f:
-					new_manifest = salt.utils.json.load(_f)
-		else:
-			new_manifest = content
-
-		new_manifest['name'] = name
-		version = new_manifest['packageVersion']
-
-		# Fetch the existing/old manifest if it exists
-		old_manifest = _get_existing_manifest(new_manifest['name'], new_manifest['packageVersion'])
-
-		if old_manifest:
-			diff = __utils__['data.recursive_diff'](old_manifest, new_manifest)
-			ret['changes'] = diff
-
-
+		if old_manifest is not None:
 			if ret['changes']:
-				ret['comment'] = "Package '{} {}' would be updated".format(name, version)
+				ret['comment'] = "Package '{} {}' would be updated".format(man_name, man_version)
 
 				if not show_changes:
 					ret['changes'] = "<show_changes=False>"
-			else:
-				ret['comment'] = "Package '{} {}' is in the correct state".format(name, version)
-				ret['changes'] = {}
 		else:
-			ret['comment'] = "New package '{} {}' would be created".format(name, version)
+			ret['comment'] = "New package '{} {}' would be created".format(man_name, man_version)
 			ret['changes'] = {
 				'new': content
 			}
@@ -149,47 +180,38 @@ def package_present(name,
 		return ret
 
 	#
+	# Delete the existing manifest if it exists and is different to the new manifest
+	#
+	if old_manifest is not None:
+		if ret['changes']:
+			delete_response = __salt__['rapyutaio.delete_package'](old_package_uid)
+
+			if delete_response['result'] is False:
+				ret['comment'] = delete_response['message']
+				return ret
+		else:
+			ret['comment'] = "Package '{} {}' is in the correct state".format(man_name, man_version)
+
+	#
 	# Attempt to upload the new manifest
 	#
-	response = __salt__['rapyutaio.create_or_update_package'](name=name,
-	                                                          source=source,
-	                                                          content=content,
+	response = __salt__['rapyutaio.create_or_update_package'](content=new_manifest,
 	                                                          dry_run=__opts__['test'])
 	log.debug(response)
 
-	if response['status'] == 409:
-		# Conflict: package already exists with this version number
-		file_name = __salt__["cp.cache_file"](source)
-
-		if os.path.exists(file_name):
-			with salt.utils.files.fopen(file_name, "r") as _f:
-				new_manifest = salt.utils.json.load(_f)
-
-		new_manifest['name'] = name
-
-		existing_package_summary = __salt__['rapyutaio.get_packages'](name=new_manifest['name'],
-		                                                              version=new_manifest['packageVersion'])[0]
-		package_uid = existing_package_summary['id']
-		old_manifest = __salt__['rapyutaio.get_manifest'](package_uid=package_uid)
-
-		diff = __utils__['dictdiffer.deep_diff'](old_manifest, new_manifest)
-		ret['changes'] = diff
-
-		if diff != {}:
-			delete_response = __salt__['rapyutaio.delete_package'](package_uid)
-
-			if delete_response['status'] == 200:
-				create_info = __salt__['rapyutaio.create_or_update_package'](name=name, contents=new_manifest)
-
-				if 'error' in create_info:
-					ret['comment'] = create_info['message']
-				else:
-					ret['result'] = True
-	elif response['status'] == 201:
-		ret['result'] = True
-		ret['changes'] = salt.utils.json.loads(response['body'])
+	if response['result'] == False:
+		# Failed to upload the new manifest
+		ret['comment'] = response['message']
 	else:
-		ret['comment'] = response
+		ret['result'] = True
+
+		if old_manifest is not None:
+			# Replacing existing manifest
+			ret['comment'] = "Package '{} {}' was updated".format(man_name, man_version)
+		else:
+			# Creating new manifest
+			ret['changes'] = response['changes']
+			ret['comment'] = "New package '{} {}' created".format(man_name, man_version)
 
 	return ret
 
