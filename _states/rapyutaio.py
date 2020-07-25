@@ -5,13 +5,7 @@ Manage Rapyuta IO Resources
 
 Manage Rapyuta IO resources.
 
-This module accepts explicit AWS credentials but can also utilize
-IAM roles assigned to the instance through Instance Profiles. Dynamic
-credentials are then automatically obtained from AWS API and no further
-configuration is necessary. More information available `here
-<http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/iam-roles-for-amazon-ec2.html>`_.
-
-If IAM roles are not used you need to specify them either in a pillar file or
+Specify credentials either in a pillar file or
 in the minion's config file:
 
 .. code-block:: yaml
@@ -70,23 +64,6 @@ def __virtual__():
 	if "rapyutaio.get_packages" not in __salt__:
 		return (False, "rapyutaio module could not be loaded")
 	return __virtual_name__
-
-
-
-def _get_existing_manifest(name, version):
-	"""
-	Return the package manifest of an existing package version.
-	Returns None if the package and version does not exist
-	"""
-	try:
-		package_summary = __salt__['rapyutaio.get_packages'](name=name,
-		                                                     version=version)[0]
-	except IndexError as e:
-		# There is no existing package with that name and version
-		return None
-
-	package_manifest = __salt__['rapyutaio.get_manifest'](package_summary['id'])
-	return package_manifest
 
 
 
