@@ -3,10 +3,7 @@
 Manage Rapyuta IO Resources
 ===================
 
-Manage S3 resources. Be aware that this interacts with Amazon's services,
-and so may incur charges.
-
-This module uses ``boto3``, which can be installed via package, or pip.
+Manage Rapyuta IO resources.
 
 This module accepts explicit AWS credentials but can also utilize
 IAM roles assigned to the instance through Instance Profiles. Dynamic
@@ -59,7 +56,7 @@ import salt.ext.six as six
 import salt.utils.hashutils
 import salt.utils.dictdiffer
 import salt.utils.listdiffer
-import salt.utils.yaml
+from salt.exceptions import CommandExecutionError, MinionError, SaltInvocationError
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +67,7 @@ def __virtual__():
 	"""
 	Only load if rapyutaio is available.
 	"""
-	if "rapyutaio.list_packages" not in __salt__:
+	if "rapyutaio.get_packages" not in __salt__:
 		return (False, "rapyutaio module could not be loaded")
 	return __virtual_name__
 
@@ -117,9 +114,9 @@ def package_present(name,
 				log.debug(file_extension)
 
 				if file_extension == '.json':
-					new_manifest = salt.utils.json.load(_f)
+					new_manifest = __utils__['json.load'](_f)
 				elif file_extension in ['.yaml', '.yml']:
-					new_manifest = salt.utils.yaml.load(_f)
+					new_manifest = __utils__['yaml.load'](_f)
 				else:
 					ret['comment'] = "Manifest source must be a JSON (.json) or YAML (.yaml, .yml) file"
 					ret['result'] = False
@@ -131,6 +128,12 @@ def package_present(name,
 	else:
 		new_manifest = content
 
+	#
+	# Allow setting the name via the state
+	#
+	if 'name' not in new_manifest:
+		new_manifest['name'] = name
+
 	man_name = new_manifest['name']
 	man_version = new_manifest['packageVersion']
 
@@ -138,16 +141,16 @@ def package_present(name,
 	# Fetch the existing/old manifest if it exists
 	#
 	try:
-		old_package_info = __salt__['rapyutaio.get_packages'](name=man_name,
-		                                                      version=man_version)[0]
-	except IndexError as e:
-		# There is no existing package with that name and version
-		old_manifest = None
-	else:
-		old_manifest = __salt__['rapyutaio.get_manifest'](old_package_info['id'])
-		old_package_uid = old_package_info['id']
+		old_package = __salt__['rapyutaio.get_package'](name=man_name,
+		                                                version=man_version)
+	except CommandExecutionError as e:
+		ret['comment'] = e
+		return ret
 
-	if old_manifest is not None:
+	old_package_uid = old_package['packageInfo']['guid']
+	old_manifest = __salt__['rapyutaio.get_manifest'](old_package_uid)
+
+	if old_manifest:
 		# Is the new manifest different to the old
 		ret['changes'] = __utils__['data.recursive_diff'](old_manifest, new_manifest)
 
@@ -173,9 +176,14 @@ def package_present(name,
 					ret['changes'] = "<show_changes=False>"
 		else:
 			ret['comment'] = "New package '{} {}' would be created".format(man_name, man_version)
-			ret['changes'] = {
-				'new': content
-			}
+
+			if not show_changes:
+				ret['changes'] = "<show_changes=False>"
+			else:
+				ret['changes'] = {
+					'new': content,
+					'old': None
+				}
 
 		return ret
 
@@ -184,10 +192,10 @@ def package_present(name,
 	#
 	if old_manifest is not None:
 		if ret['changes']:
-			delete_response = __salt__['rapyutaio.delete_package'](old_package_uid)
-
-			if delete_response['result'] is False:
-				ret['comment'] = delete_response['message']
+			try:
+				delete_response = __salt__['rapyutaio.delete_package'](old_package_uid)
+			except CommandExecutionError as e:
+				ret['comment'] = e
 				return ret
 		else:
 			ret['comment'] = "Package '{} {}' is in the correct state".format(man_name, man_version)
@@ -195,8 +203,7 @@ def package_present(name,
 	#
 	# Attempt to upload the new manifest
 	#
-	response = __salt__['rapyutaio.create_or_update_package'](content=new_manifest,
-	                                                          dry_run=__opts__['test'])
+	response = __salt__['rapyutaio.create_package'](content=new_manifest)
 	log.debug(response)
 
 	if response['result'] == False:
@@ -217,8 +224,49 @@ def package_present(name,
 
 
 
-def package_absent():
-	pass
+def package_absent(name, version):
+	"""
+	Removes the version of a package if it exists.
+	"""
+	ret = {
+		"name": name,
+		"result": False,
+		"comment": "",
+		"changes": {},
+	}
+
+	try:
+		package = __salt__['rapyutaio.get_package'](name=name, version=version)
+	except CommandExecutionError as e:
+		ret['comment'] = e
+		return ret
+
+	if not package:
+		ret['result'] = True
+		ret['comment'] = "Package '{0} {1}' is not present".format(name, version)
+		return ret
+
+	#
+	# test=True
+	#
+	if __opts__['test']:
+		# Always return a None result for dry-runs
+		ret['result'] = None
+		ret['comment'] = "Package '{0} {1}' would be deleted".format(name, version)
+		return ret
+
+	try:
+		__salt__['rapyutaio.delete_package'](name=name, version=version)
+	except CommandExecutionError as e:
+		ret['comment'] = e
+		return ret
+
+	ret['result'] = True
+	ret['changes']['old'] = package
+	ret['changes']['new'] = None
+	ret['comment'] = "Package {0} {1} deleted".format(name, version)
+
+	return ret
 
 
 
@@ -244,57 +292,3 @@ def volume_attached():
 
 def volume_absent():
 	pass
-
-
-
-def diff_manifests(oldpkg, newpkg):
-	"""
-	Find the difference between a new manifest and an existing manifest returned from the API
-	"""
-	changes = {
-		'old': {},
-		'new': {},
-	}
-
-	#
-	# Package
-	#
-	pkg_vars = [
-		"apiVersion",
-		"bindable",
-		"description",
-		"name",
-		"packageVersion",
-	]
-	for v in pkg_vars:
-		# manifest has "name" but the API packageInfo has "packageName"
-		if v == "name":
-			o = oldpkg['packageName']
-		else:
-			o = oldpkg[v]
-		n = newpkg[v]
-
-		if o != n:
-			changes['old'][v] = o
-			changes['new'][v] = n
-
-
-	#
-	# Plans
-	#
-	# "dependentDeployments": [],
-	# "exposedParameters": [],
-	# "inboundROSInterfaces": {
-	# "anyIncomingScopedOrTargetedRosConfig": false
-	# },
-	# "includePackages": [],
-	# "metadata": {},
-	# "name": "default",
-	# "singleton": false
-
-	#
-	# Components
-	#
-	# package -> plans[0] -> components[] == package -> plans[0] -> components -> components[]
-
-	return changes
