@@ -351,10 +351,10 @@ def create_package(source=None,
 
 
 
-def list_networks(project_id=None,
+def get_networks(project_id=None,
                   auth_token=None):
 	"""
-	List all routed networks
+	Get a list of all routed networks
 	"""
 
 	(project_id, auth_token) = _get_config(project_id, auth_token)
@@ -366,9 +366,16 @@ def list_networks(project_id=None,
 		"Authorization": "Bearer " + auth_token,
 	}
 
-	return salt.utils.http.query(url=url,
-	                             header_dict=header_dict,
-	                             method="GET")
+	response =  __utils__['http.query'](url=url,
+	                                    header_dict=header_dict,
+	                                    method="GET")
+
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	return __utils__['json.loads'](response['body'])
 
 
 
@@ -387,9 +394,16 @@ def get_network(network_guid,
 		"Authorization": "Bearer " + auth_token,
 	}
 
-	return salt.utils.http.query(url=url,
-	                             header_dict=header_dict,
-	                             method="GET")
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET")
+
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	return __utils__['json.loads'](response['body'])
 
 
 
