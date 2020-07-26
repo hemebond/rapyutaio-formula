@@ -283,7 +283,6 @@ def delete_package(package_uid=None,
 	                                    method="DELETE",
 	                                    params=data,
 	                                    status=True)
-	log.debug(response)
 
 	if response['status'] == 200:
 		return True
@@ -305,13 +304,6 @@ def create_package(source=None,
 	Upload a package manifest
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
-
-	url = "https://gacatalog.apps.rapyuta.io/serviceclass/add"
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
 
 	if content is None:
 		if source is None:
@@ -338,12 +330,17 @@ def create_package(source=None,
 				"File '{}' does not exist".format(file_name)
 			)
 
+	url = "https://gacatalog.apps.rapyuta.io/serviceclass/add"
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+	}
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
 	                                   method="POST",
 	                                   data=__utils__['json.dumps'](content),
 	                                   status=True)
-	log.debug(response)
 
 	if 'error' in response:
 		raise CommandExecutionError(

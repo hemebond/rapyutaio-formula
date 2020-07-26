@@ -82,6 +82,10 @@ def package_present(name,
 	# Get the content of the new manifest
 	#
 	if content is None:
+		if source is None:
+			ret['comment'] = "package_present requires either 'source' or 'content'"
+			return ret
+
 		file_name = __salt__["cp.cache_file"](source)
 
 		if file_name is not False:
@@ -96,11 +100,9 @@ def package_present(name,
 					new_manifest = __utils__['yaml.load'](_f)
 				else:
 					ret['comment'] = "Manifest source must be a JSON (.json) or YAML (.yaml, .yml) file"
-					ret['result'] = False
 					return ret
 		else:
 			ret['comment'] = "Source file '{}' missing".format(source)
-			ret['result'] = False
 			return ret
 	else:
 		new_manifest = content
@@ -124,8 +126,11 @@ def package_present(name,
 		ret['comment'] = e
 		return ret
 
-	old_package_uid = old_package['packageInfo']['guid']
-	old_manifest = __salt__['rapyutaio.get_manifest'](old_package_uid)
+	if old_package:
+		old_package_uid = old_package['packageInfo']['guid']
+		old_manifest = __salt__['rapyutaio.get_manifest'](old_package_uid)
+	else:
+		old_manifest = None
 
 	if old_manifest:
 		# Is the new manifest different to the old
@@ -181,21 +186,16 @@ def package_present(name,
 	# Attempt to upload the new manifest
 	#
 	response = __salt__['rapyutaio.create_package'](content=new_manifest)
-	log.debug(response)
 
-	if response['result'] == False:
-		# Failed to upload the new manifest
-		ret['comment'] = response['message']
+	ret['result'] = True
+
+	if old_manifest is not None:
+		# Replacing existing manifest
+		ret['comment'] = "Package '{} {}' was updated".format(man_name, man_version)
 	else:
-		ret['result'] = True
-
-		if old_manifest is not None:
-			# Replacing existing manifest
-			ret['comment'] = "Package '{} {}' was updated".format(man_name, man_version)
-		else:
-			# Creating new manifest
-			ret['changes'] = response['changes']
-			ret['comment'] = "New package '{} {}' created".format(man_name, man_version)
+		# Creating new manifest
+		ret['changes'] = response
+		ret['comment'] = "New package '{} {}' created".format(man_name, man_version)
 
 	return ret
 
