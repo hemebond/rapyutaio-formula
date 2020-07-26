@@ -521,10 +521,10 @@ def delete_network(network_guid=None,
 
 
 
-def list_deployments(project_id=None,
-                     auth_token=None,
-                     package_uid='',
-                     phase=[]):
+def get_deployments(package_uid=None,
+                    phase=list(map(str, POSITIVE_PHASES)),
+                    project_id=None,
+                    auth_token=None,):
 	"""
 	salt-call --log-level=debug --local rapyutaio.list_deployments phase=["In progress","Succeeded"]
 	"""
@@ -537,22 +537,39 @@ def list_deployments(project_id=None,
 		"Authorization": "Bearer " + auth_token,
 	}
 	params = {
-		'package_uid': package_uid,
+		'package_uid': package_uid or '',
 		'phase': phase,
 	}
+
 	url = "https://gacatalog.apps.rapyuta.io/deployment/list?%s" % urlencode(params, doseq=True)
 
-	return salt.utils.http.query(url=url,
-	                             header_dict=header_dict,
-	                             method="GET")
+	response =  __utils__['http.query'](url=url,
+	                                    header_dict=header_dict,
+	                                    method="GET",
+	                                    status=True)
+
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	return __utils__['json.loads'](response['body'])
 
 
-def get_deployment(deploymentid,
+def get_deployment(deploymentid=None,
+                   name=None,
                    project_id=None,
                    auth_token=None):
 	"""
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if name is not None:
+		deployments = get_deployments(project_id=project_id, auth_token=auth_token)
+
+		for deployment in deployments:
+			if deployment['name'] == name:
+				deploymentid = deployment['deploymentId']
 
 	header_dict = {
 		"accept": "application/json",
@@ -561,9 +578,20 @@ def get_deployment(deploymentid,
 	}
 	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s" % deploymentid
 
-	return salt.utils.http.query(url=url,
-	                             header_dict=header_dict,
-	                             method="GET")
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET",
+	                                   status=True)
+
+	if 'error' in response:
+		if response['status'] == 404:
+			return False
+
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	return __utils__['json.loads'](response['body'])
 
 
 
@@ -581,22 +609,32 @@ def get_dependencies(deploymentid,
 	}
 	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s/dependencies" % deploymentid
 
-	return salt.utils.http.query(url=url,
-	                             header_dict=header_dict,
-	                             method="GET")
+	return __utils__['http.query'](url=url,
+	                               header_dict=header_dict,
+	                               method="GET")
 
 
-def deprovision(deploymentid,
-                package_uid,
-                plan_id,
-                project_id=None,
-                auth_token=None):
+def delete_deployment(deploymentid=None,
+                      package_uid=None,
+                      plan_id=None,
+                      name=None,
+                      project_id=None,
+                      auth_token=None):
 	"""
 	Response:
 
 		{"async":false,"component_status":null}
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if name is not None:
+		deployment = get_deployment(name=name,
+		                            project_id=None,
+		                            auth_token=None)
+	else:
+		deployment = get_deployment(deploymentid=deploymentid,
+		                            project_id=None,
+		                            auth_token=None)
 
 	header_dict = {
 		"accept": "application/json",
@@ -609,10 +647,10 @@ def deprovision(deploymentid,
 	}
 	url = "https://gacatalog.apps.rapyuta.io/v2/service_instances/%s" % deploymentid
 
-	return salt.utils.http.query(url=url,
-	                             header_dict=header_dict,
-	                             method="DELETE",
-	                             params=params)
+	return __utils__['http.query'](url=url,
+	                               header_dict=header_dict,
+	                               method="DELETE",
+	                               params=params)
 
 
 
