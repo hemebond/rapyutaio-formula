@@ -26,6 +26,12 @@ class phase(Enum):
 	PARTIALLY_DEPROVISIONED = 'Partially deprovisioned'
 	STOPPED = 'Deployment stopped'
 
+POSITIVE_PHASES = [
+	phase.INPROGRESS,
+	phase.PROVISIONING,
+	phase.SUCCEEDED,
+]
+
 class status(Enum):
 	def __str__(self):
 		return str(self.value)
@@ -352,7 +358,7 @@ def create_package(source=None,
 
 
 def get_networks(project_id=None,
-                  auth_token=None):
+                 auth_token=None):
 	"""
 	Get a list of all routed networks
 	"""
@@ -368,7 +374,8 @@ def get_networks(project_id=None,
 
 	response =  __utils__['http.query'](url=url,
 	                                    header_dict=header_dict,
-	                                    method="GET")
+	                                    method="GET",
+	                                    status=True)
 
 	if 'error' in response:
 		raise CommandExecutionError(
@@ -379,13 +386,33 @@ def get_networks(project_id=None,
 
 
 
-def get_network(network_guid,
+def get_network(network_guid=None,
+                name=None,
                 project_id=None,
                 auth_token=None):
 	"""
-	Get a Routed Network
+	Get an active Routed Network
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if network_guid is None:
+		if name is None:
+			raise SaltInvocationError(
+				"get_network needs either a valid guid or name"
+			)
+
+		networks = get_networks(project_id=project_id, auth_token=auth_token)
+
+		for network in networks:
+			if network['name'] == name:
+				if network['internalDeploymentStatus']['phase'] in ['In Progress', 'Succeeded', 'Provisioning']:
+					network_guid = network['guid']
+					break
+
+	if network_guid is None:
+		# We have no network_guid and the name didn't
+		# match an existing network so we return False
+		return False
 
 	url = "https://gacatalog.apps.rapyuta.io/routednetwork/%s" % network_guid
 	header_dict = {
@@ -396,12 +423,14 @@ def get_network(network_guid,
 
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
-	                                   method="GET")
+	                                   method="GET",
+	                                   status=True)
 
 	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
+		if response['status'] != 404:
+			raise CommandExecutionError(response['error'])
+		else:
+			return False
 
 	return __utils__['json.loads'](response['body'])
 
@@ -409,8 +438,12 @@ def get_network(network_guid,
 
 
 
-def add_network(project_id=None,
-                auth_token=None):
+def create_network(name,
+                   ros_distro,
+                   runtime,
+                   parameters=None,
+                   project_id=None,
+                   auth_token=None):
 	"""
 	Create a new Routed Network
 	"""
@@ -422,27 +455,48 @@ def add_network(project_id=None,
 		"project": project_id,
 		"Authorization": "Bearer " + auth_token,
 	}
+	data = {
+		"name": name,
+		"rosDistro": ros_distro,
+		"runtime": runtime,
+		"parameters": parameters or {},
+	}
+
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="POST",
+	                                   data=__utils__['json.dumps'](data),
+	                                   status=True)
+
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	return __utils__['json.loads'](response['body'])
 
 
-	ret = salt.utils.http.query(url=url,
-	                            header_dict=header_dict,
-	                            method="POST",
-	                            data=salt.utils.json.dumps(contents))
 
-	if ret['status'] == 409:
-		# Conflict: netowkr already exists with this name
-		pass
-
-	return ret
-
-
-
-def delete_network(network_guid,
+def delete_network(network_guid=None,
+                   name=None,
                    project_id=None,
                    auth_token=None):
 	"""
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if name is not None:
+		networks = get_networks(project_id=project_id, auth_token=auth_token)
+
+		for network in networks:
+			if network['name'] == name:
+				network_guid = network['guid']
+				break
+
+	if network_guid is None:
+		raise CommandExecutionError(
+			"delete_network needs either a valid guid or name"
+		)
 
 	url = "https://gacatalog.apps.rapyuta.io/routednetwork/%s" % network_guid
 	header_dict = {
@@ -450,10 +504,20 @@ def delete_network(network_guid,
 		"project": project_id,
 		"Authorization": "Bearer " + auth_token,
 	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="DELETE",
+	                                   status=True)
+	log.debug(response)
 
-	return salt.utils.http.query(url=url,
-	                             header_dict=header_dict,
-	                             method="DELETE")
+	if response['status'] == 200:
+		return True
+
+	if 'error' in response:
+		if response['status'] != 404:
+			raise CommandExecutionError(response['error'])
+
+	return False
 
 
 

@@ -247,13 +247,95 @@ def package_absent(name, version):
 
 
 
-def network_present():
-	pass
+def network_present(name,
+                    runtime,
+                    ros_distro,
+                    parameters=None):
+	"""
+	"""
+	ret = {
+		"name": name,
+		"result": False,
+		"comment": "",
+		"changes": {},
+	}
+
+	old_network = __salt__['rapyutaio.get_network'](name=name)
+
+	if old_network:
+		log.debug(old_network)
+		ret['changes'] = __utils__['data.recursive_diff'](
+			{
+				"name": old_network['name'],
+				"runtime": old_network['runtime'],
+				"rosDistro": old_network['rosDistro'],
+				"parameters": old_network.get('parameters', {}),
+			}, {
+				"name": name,
+				"runtime": runtime,
+				"rosDistro": ros_distro,
+				"parameters": parameters or {},
+			}
+		)
+
+		if ret['changes']:
+			ret['result'] = False
+			ret['comment'] = "Network {0} exists but is different.".format(name)
+		else:
+			ret['result'] = True
+			ret['comment'] = "Network {0} is in the correct state.".format(name)
+
+		return ret
+
+	__salt__['rapyutaio.create_network'](name=name,
+	                                     runtime=runtime,
+	                                     ros_distro=ros_distro,
+	                                     parameters=parameters)
+
+	ret['result'] = True
+	ret['comment'] = "New network {0} created".format(name)
+
+	return ret
 
 
 
-def network_absent():
-	pass
+
+def network_absent(name):
+	ret = {
+		"name": name,
+		"result": False,
+		"comment": "",
+		"changes": {},
+	}
+
+	old_network = __salt__['rapyutaio.get_network'](name=name)
+
+	if not old_network:
+		ret['result'] = True
+		ret['comment'] = "Network {0} is not present".format(name)
+		return ret
+
+	old_network_guid = old_network['guid']
+
+	ret['changes'] = {
+		'old': old_network,
+		'new': None
+	}
+
+	#
+	# test=True
+	#
+	if __opts__['test']:
+		# Always return a None result for dry-runs
+		ret['result'] = None
+		ret['comment'] = "Network {0} would be deleted".format(name)
+		return ret
+
+	__salt__['rapyutaio.delete_network'](old_network_guid)
+
+	ret['result'] = True
+	ret['comment'] = "Network {0} deleted".format(name)
+	return ret
 
 
 
