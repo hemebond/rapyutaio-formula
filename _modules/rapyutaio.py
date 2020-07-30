@@ -10,8 +10,15 @@ from salt.exceptions import CommandExecutionError, MinionError, SaltInvocationEr
 
 
 
-
 log = logging.getLogger(__name__)
+
+
+
+CORE_API_HOST = "https://gaapiserver.apps.rapyuta.io"
+CATALOG_HOST = "https://gacatalog.apps.rapyuta.io"
+DEVICE_API_BASE_PATH = "/api/device-manager/v0/"
+DEVICE_API_PATH = DEVICE_API_BASE_PATH + "devices/"
+DEVICE_COMMAND_API_PATH = DEVICE_API_BASE_PATH + 'cmd/'
 
 
 
@@ -682,11 +689,10 @@ def get_manifest(package_uid,
 	if not package:
 		return False
 
+	url = package['packageUrl']
 	header_dict = {
 		"accept": "application/json"
 	}
-	url = package['packageUrl']
-
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
 	                                   method="GET")
@@ -697,3 +703,91 @@ def get_manifest(package_uid,
 		)
 
 	return __utils__['json.loads'](response['body'])
+
+
+
+def get_devices(project_id=None,
+                auth_token=None):
+	"""
+	"""
+	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	url = CORE_API_HOST + DEVICE_API_PATH
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET")
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	response_body = __utils__['json.loads'](response['body'])
+	return response_body['response']['data']
+
+
+
+def cmd(tgt,
+        project_id=None,
+        auth_token=None):
+	"""
+	"""
+	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	#
+	# Get devices
+	#
+	all_devices = get_devices(project_id=project_id, auth_token=auth_token)
+
+	# devices = []
+	# for device in all_devices:
+	# 	if __salt__['match.glob'](tgt, device['name']):
+	# 		devices.append(device['uuid'])
+
+	devices = [
+		device['uuid'] \
+		for device \
+		in all_devices \
+		if __salt__['match.compound'](tgt, device['name'])
+		and device['status'] == "ONLINE"
+	]
+
+	if devices:
+		url = CORE_API_HOST + DEVICE_COMMAND_API_PATH
+		header_dict = {
+			"accept": "application/json",
+			"project": project_id,
+			"Authorization": "Bearer " + auth_token,
+			"Content-Type": "application/json",
+		}
+		log.debug(header_dict)
+
+		command = {
+			"cmd": "ls /",
+			# "shell": "/bin/bash",
+			# "env": env or {},
+			# "bg": bg,
+			# "runas": runas,
+			# "pwd": pwd,
+			"device_ids": devices
+		}
+		log.debug(__utils__['json.dumps'](command))
+
+		response = __utils__['http.query'](url=url,
+		                                   header_dict=header_dict,
+		                                   method="POST",
+		                                   data=__utils__['json.dumps'](command),
+		                                   status=True)
+		if 'error' in response:
+			raise CommandExecutionError(
+				response['error']
+			)
+
+		response_body = __utils__['json.loads'](response['body'])
+		return response_body['response']['data']
+
+	return False
