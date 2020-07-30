@@ -595,23 +595,16 @@ def get_deployment(deploymentid=None,
 
 
 
-def get_dependencies(deploymentid,
-                     project_id=None,
-                     auth_token=None):
+def create_deployment(name,
+                      package_uid,
+                      project_id=None,
+                      auth_token=None):
 	"""
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
-	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s/dependencies" % deploymentid
+	return False
 
-	return __utils__['http.query'](url=url,
-	                               header_dict=header_dict,
-	                               method="GET")
 
 
 def delete_deployment(deploymentid=None,
@@ -651,6 +644,26 @@ def delete_deployment(deploymentid=None,
 	                               header_dict=header_dict,
 	                               method="DELETE",
 	                               params=params)
+
+
+
+def get_dependencies(deploymentid,
+                     project_id=None,
+                     auth_token=None):
+	"""
+	"""
+	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+	}
+	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s/dependencies" % deploymentid
+
+	return __utils__['http.query'](url=url,
+	                               header_dict=header_dict,
+	                               method="GET")
 
 
 
