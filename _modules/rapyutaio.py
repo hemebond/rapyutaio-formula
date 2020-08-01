@@ -732,6 +732,12 @@ def get_devices(project_id=None,
 
 
 def cmd(tgt,
+        cmd,
+        shell=None,
+        env={},
+        bg=False,
+        runas=None,
+        cwd=None,
         project_id=None,
         auth_token=None):
 	"""
@@ -742,11 +748,6 @@ def cmd(tgt,
 	# Get devices
 	#
 	all_devices = get_devices(project_id=project_id, auth_token=auth_token)
-
-	# devices = []
-	# for device in all_devices:
-	# 	if __salt__['match.glob'](tgt, device['name']):
-	# 		devices.append(device['uuid'])
 
 	devices = [
 		device['uuid'] \
@@ -766,16 +767,21 @@ def cmd(tgt,
 		}
 		log.debug(header_dict)
 
+		# Copy only the set function args into the command dict
 		command = {
-			"cmd": "ls /",
-			# "shell": "/bin/bash",
-			# "env": env or {},
-			# "bg": bg,
-			# "runas": runas,
-			# "pwd": pwd,
-			"device_ids": devices
+			key: val
+			for key, val
+			in locals().items()
+			if key
+			in ['cmd',
+			    'shell',
+			    'env',
+			    'bg',
+			    'runas',
+			    'cwd']
+			and val
 		}
-		log.debug(__utils__['json.dumps'](command))
+		command.update({"device_ids": devices})
 
 		response = __utils__['http.query'](url=url,
 		                                   header_dict=header_dict,
