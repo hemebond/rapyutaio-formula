@@ -706,7 +706,8 @@ def get_manifest(package_uid,
 
 
 
-def get_devices(project_id=None,
+def get_devices(tgt=None,
+                project_id=None,
                 auth_token=None):
 	"""
 	"""
@@ -726,8 +727,21 @@ def get_devices(project_id=None,
 			response['error']
 		)
 
+	# parse the response
 	response_body = __utils__['json.loads'](response['body'])
-	return response_body['response']['data']
+
+	# filter the list of devices
+	if tgt is not None:
+		devices = [
+			device
+			for device
+			in response_body['response']['data']
+			if __salt__['match.compound'](tgt, device['name'])
+		]
+	else:
+		devices = response_body['response']['data']
+
+	return devices
 
 
 
@@ -750,9 +764,9 @@ def cmd(tgt,
 	all_devices = get_devices(project_id=project_id, auth_token=auth_token)
 
 	devices = [
-		device['uuid'] \
-		for device \
-		in all_devices \
+		device['uuid']
+		for device
+		in all_devices
 		if __salt__['match.compound'](tgt, device['name'])
 		and device['status'] == "ONLINE"
 	]
