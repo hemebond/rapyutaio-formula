@@ -2,11 +2,11 @@ import os
 import logging
 from urllib.parse import urlencode
 from enum import Enum
-from copy import deepcopy
+from time import sleep
 
 import salt.utils.http
 import salt.utils.json
-from salt.exceptions import CommandExecutionError, MinionError, SaltInvocationError
+from salt.exceptions import CommandExecutionError, SaltInvocationError
 
 
 
@@ -16,11 +16,12 @@ log = logging.getLogger(__name__)
 
 CORE_API_HOST = "https://gaapiserver.apps.rapyuta.io"
 CATALOG_HOST = "https://gacatalog.apps.rapyuta.io"
+PROVISION_API_PATH = '/v2/service_instances'
 DEVICE_API_BASE_PATH = "/api/device-manager/v0/"
 DEVICE_API_PATH = DEVICE_API_BASE_PATH + "devices/"
 DEVICE_COMMAND_API_PATH = DEVICE_API_BASE_PATH + 'cmd/'
-
-
+DEVICE_METRIC_API_PATH = DEVICE_API_BASE_PATH + 'metrics/'
+DEVICE_TOPIC_API_PATH = DEVICE_API_BASE_PATH + 'topics/'
 
 class phase(Enum):
 	def __str__(self):
@@ -77,6 +78,11 @@ def _get_config(project_id, auth_token):
 
 
 
+# -----------------------------------------------------------------------------
+#
+# Packages
+#
+# -----------------------------------------------------------------------------
 def get_packages(name=None,
                  phase=[],
                  project_id=None,
@@ -364,6 +370,11 @@ def create_package(source=None,
 
 
 
+# -----------------------------------------------------------------------------
+#
+# Networks
+#
+# -----------------------------------------------------------------------------
 def get_networks(project_id=None,
                  auth_token=None):
 	"""
@@ -389,7 +400,16 @@ def get_networks(project_id=None,
 			response['error']
 		)
 
-	return __utils__['json.loads'](response['body'])
+	networks = __utils__['json.loads'](response['body'])
+
+	networks = [
+		network
+		for network
+		in networks
+		if network['internalDeploymentStatus']['phase'] in list(map(str, POSITIVE_PHASES))
+	]
+
+	return networks
 
 
 
@@ -440,8 +460,6 @@ def get_network(network_guid=None,
 			return False
 
 	return __utils__['json.loads'](response['body'])
-
-
 
 
 
@@ -528,6 +546,11 @@ def delete_network(network_guid=None,
 
 
 
+# -----------------------------------------------------------------------------
+#
+# Deployments
+#
+# -----------------------------------------------------------------------------
 def get_deployments(package_uid=None,
                     phase=list(map(str, POSITIVE_PHASES)),
                     project_id=None,
@@ -604,11 +627,132 @@ def get_deployment(deploymentid=None,
 
 def create_deployment(name,
                       package_uid,
+                      routed_networks=[],
                       project_id=None,
                       auth_token=None):
 	"""
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	# {
+	# 	"accepts_incomplete": true,
+	# 	"api_version": "1.0.0",
+	# 	"context": {
+	# 		"dependentDeployments": [],
+	# 		"labels": [],
+	# 		"routedNetworks": [
+	# 			{
+	# 				"guid": "net-tuyuexxtupcrjmxjunjfrdrs"
+	# 			}
+	# 		],
+	# 		"name": "ROS PUBLISHER"
+	# 	},
+	# 	"instance_id": "instanceId",
+	# 	"organization_guid": "organizationGuid",
+	# 	"parameters": {
+	# 		"global": {},
+	# 		"iqqafabrjdmwmmnbpqkautfz": {
+	# 			"bridge_params": {
+	# 				"alias": "TALKER"
+	# 			},
+	# 			"component_id": "iqqafabrjdmwmmnbpqkautfz"
+	# 		}
+	# 	},
+	# 	"plan_id": "plan-uuqfdaiaezzxidcamnvpxaxx",
+	# 	"service_id": "pkg-vnejycpfzzlssisfsyaizxtq",
+	# 	"space_guid": "spaceGuid"
+	# }
+
+	#
+	# Create provision configuration
+	#
+	package = get_package(package_uid=package_uid,
+	                      project_id=project_id,
+	                      auth_token=auth_token)
+	plan = package['packageInfo']['plans'][0]
+	provision_configuration = {
+		"accepts_incomplete": True,
+		"api_version": '1.0.0',
+		"context": {
+			"dependentDeployments": [],
+			"labels": [],
+			"name": name,
+		},
+		"parameters": {
+			"global": {},
+		},
+		"plan_id": plan['planId'],
+		"service_id": package_uid,
+		"space_guid": "spaceGuid",
+		'instance_id': 'instanceId',
+		'organization_guid': 'organizationGuid',
+	}
+
+	for component in plan['components']['components']:
+		for internal_component in plan['internalComponents']:
+			if internal_component['componentName'] == component['name']:
+				component_id = internal_component['componentId']
+
+		parameters = {
+			"component_id": component_id,
+			"bridge_params": {
+				"alias": component['name']
+			}
+		}
+		for params in component['parameters']:
+			parameters[params['name']] = params.get('default', None)
+
+		provision_configuration['parameters'][component_id] = parameters
+
+	#
+	# Add routed networks
+	#
+	all_routed_networks = get_networks(project_id=project_id,
+	                                   auth_token=auth_token)
+	routed_network_names = routed_networks.split(",")
+	routed_network_guids = []
+	for network in all_routed_networks:
+		if network['name'] in routed_network_names:
+			routed_network_guids.append({
+				"guid": network['guid']
+			})
+
+	provision_configuration['context']['routedNetworks'] = routed_network_guids
+
+	#
+	# Provision
+	#
+	url = CATALOG_HOST + PROVISION_API_PATH + "/instanceId"
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+		"Content-Type": "application/json",
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="PUT",
+	                                   data=__utils__['json.dumps'](provision_configuration),
+	                                   status=True)
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+	response_body = __utils__['json.loads'](response['body'])
+
+	#
+	# Wait for the deployment to complete
+	#
+	deployment_id = response_body['operation']
+	deployment_phase = str(phase.INPROGRESS)
+	while deployment_phase in list(map(str, [phase.INPROGRESS, phase.PROVISIONING])):
+		sleep(10)
+
+		deployment = get_deployment(deployment_id)
+		deployment_phase = deployment['phase']
+
+	if deployment_phase == str(phase.SUCCEEDED):
+		return deployment
 
 	return False
 
@@ -706,6 +850,11 @@ def get_manifest(package_uid,
 
 
 
+# -----------------------------------------------------------------------------
+#
+# Devices
+#
+# -----------------------------------------------------------------------------
 def get_devices(tgt=None,
                 project_id=None,
                 auth_token=None):
@@ -721,7 +870,8 @@ def get_devices(tgt=None,
 	}
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
-	                                   method="GET")
+	                                   method="GET",
+	                                   status=True)
 	if 'error' in response:
 		raise CommandExecutionError(
 			response['error']
@@ -745,6 +895,53 @@ def get_devices(tgt=None,
 
 
 
+def get_device(device_id=None,
+               name=None,
+               project_id=None,
+               auth_token=None):
+	"""
+	"""
+	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if device_id is None:
+		if name is None:
+			raise SaltInvocationError(
+				"get_device requires device_id or name"
+			)
+
+		all_devices = get_devices(tgt=name,
+		                          project_id=project_id,
+		                          auth_token=auth_token)
+
+		device_id = all_devices[0]['uuid']
+
+	url = CORE_API_HOST + DEVICE_API_PATH + device_id
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET",
+	                                   status=True)
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	# parse the response
+	response_body = __utils__['json.loads'](response['body'])
+
+	return response_body['response']['data']
+
+
+
+# -----------------------------------------------------------------------------
+#
+# Commands
+#
+# -----------------------------------------------------------------------------
 def cmd(tgt,
         cmd,
         shell=None,
@@ -811,3 +1008,157 @@ def cmd(tgt,
 		return response_body['response']['data']
 
 	return False
+
+
+# -----------------------------------------------------------------------------
+#
+# Metrics
+#
+# -----------------------------------------------------------------------------
+def get_metrics(name=None,
+                device_id=None,
+                project_id=None,
+                auth_token=None):
+	"""
+	"""
+	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if device_id is None:
+		if name is None:
+			raise SaltInvocationError(
+				"get_device requires device_id or name"
+			)
+
+		device = get_device(device_id=device_id,
+		                    name=name,
+		                    project_id=project_id,
+		                    auth_token=auth_token)
+
+		device_id = device['uuid']
+
+	url = CORE_API_HOST + DEVICE_METRIC_API_PATH + device_id
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET",
+	                                   status=True)
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	response_body = __utils__['json.loads'](response['body'])
+	return response_body['response']['data']
+
+
+
+def add_metrics(name=None,
+                device_id=None,
+                metric_name=None,
+                qos=None,
+                project_id=None,
+                auth_token=None):
+	"""
+	"""
+	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if device_id is None:
+		if name is None:
+			raise SaltInvocationError(
+				"get_device requires device_id or name"
+			)
+
+		device = get_device(device_id=device_id,
+		                    name=name,
+		                    project_id=project_id,
+		                    auth_token=auth_token)
+
+		device_id = device['uuid']
+
+	if not qos.isdigit():
+		try:
+			qos = {
+				"low": 0,
+				"medium": 1,
+				"high": 2
+			}[qos]
+		except KeyError:
+			raise SaltInvocationError(
+				"qos should be one of low (0), medium (1), or high (2)"
+			)
+
+	url = CORE_API_HOST + DEVICE_METRIC_API_PATH + device_id
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+		"Content-Type": "application/json",
+	}
+	data = {
+		"name": metric_name,
+		"config": {
+			"qos": qos,
+		}
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="POST",
+	                                   data=__utils__['json.dumps'](data),
+	                                   status=True)
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	return True
+
+
+
+# -----------------------------------------------------------------------------
+#
+# Topics
+#
+# -----------------------------------------------------------------------------
+def get_topics(name=None,
+               device_id=None,
+               project_id=None,
+               auth_token=None):
+	"""
+	Returns a list of topics
+	"""
+	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if device_id is None:
+		if name is None:
+			raise SaltInvocationError(
+				"get_device requires device_id or name"
+			)
+
+		device = get_device(device_id=device_id,
+		                    name=name,
+		                    project_id=project_id,
+		                    auth_token=auth_token)
+
+		device_id = device['uuid']
+
+	url = CORE_API_HOST + DEVICE_METRIC_API_PATH + device_id
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET",
+	                                   status=True)
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	response_body = __utils__['json.loads'](response['body'])
+	return response_body['response']['data']
