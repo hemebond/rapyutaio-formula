@@ -40,17 +40,9 @@ config:
 from __future__ import absolute_import, print_function, unicode_literals
 
 import os
-import copy
-import difflib
 import logging
-from pprint import pformat
 
-# Import Salt libs
-import salt.ext.six as six
-import salt.utils.hashutils
-import salt.utils.dictdiffer
-import salt.utils.listdiffer
-from salt.exceptions import CommandExecutionError, MinionError, SaltInvocationError
+from salt.exceptions import CommandExecutionError, SaltInvocationError
 
 log = logging.getLogger(__name__)
 
@@ -67,10 +59,17 @@ def __virtual__():
 
 
 
+# -----------------------------------------------------------------------------
+#
+# Packages
+#
+# -----------------------------------------------------------------------------
 def package_present(name,
                     source=None,
                     content=None,
                     show_changes=True):
+	"""
+	"""
 	ret = {
 		"name": name,
 		"result": False,
@@ -89,7 +88,7 @@ def package_present(name,
 		file_name = __salt__["cp.cache_file"](source)
 
 		if file_name is not False:
-			with salt.utils.files.fopen(file_name, "r") as _f:
+			with __utils__['files.fopen'](file_name, "r") as _f:
 				file_name_part, file_extension = os.path.splitext(file_name)
 
 				log.debug(file_extension)
@@ -247,6 +246,11 @@ def package_absent(name, version):
 
 
 
+# -----------------------------------------------------------------------------
+#
+# Networks
+#
+# -----------------------------------------------------------------------------
 def network_present(name,
                     runtime,
                     ros_distro,
@@ -339,6 +343,11 @@ def network_absent(name):
 
 
 
+# -----------------------------------------------------------------------------
+#
+# Volumes
+#
+# -----------------------------------------------------------------------------
 def volume_present():
 	pass
 
