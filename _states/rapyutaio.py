@@ -127,7 +127,7 @@ def package_present(name,
 
 	if old_package:
 		old_package_uid = old_package['packageInfo']['guid']
-		old_manifest = __salt__['rapyutaio.get_manifest'](old_package_uid)
+		old_manifest = __salt__['rapyutaio.get_manifest'](guid=old_package_uid)
 	else:
 		old_manifest = None
 
@@ -174,7 +174,7 @@ def package_present(name,
 	if old_manifest is not None:
 		if ret['changes']:
 			try:
-				delete_response = __salt__['rapyutaio.delete_package'](old_package_uid)
+				__salt__['rapyutaio.delete_package'](guid=old_package_uid)
 			except CommandExecutionError as e:
 				ret['comment'] = e
 				return ret
@@ -335,7 +335,7 @@ def network_absent(name):
 		ret['comment'] = "Network {0} would be deleted".format(name)
 		return ret
 
-	__salt__['rapyutaio.delete_network'](old_network_guid)
+	__salt__['rapyutaio.delete_network'](guid=old_network_guid)
 
 	ret['result'] = True
 	ret['comment'] = "Network {0} deleted".format(name)

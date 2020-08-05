@@ -4,8 +4,6 @@ from urllib.parse import urlencode
 from enum import Enum
 from time import sleep
 
-import salt.utils.http
-import salt.utils.json
 from salt.exceptions import CommandExecutionError, SaltInvocationError
 
 
@@ -66,8 +64,9 @@ def _error(ret, err_msg):
 
 def _get_config(project_id, auth_token):
 	"""
+	If there is no project_id or auth token provided, this
+	will attempt to fetch it from the Salt configuration
 	"""
-
 	if not project_id and __salt__["config.option"]("rapyutaio.project_id"):
 		project_id = __salt__["config.option"]("rapyutaio.project_id")
 
@@ -83,8 +82,7 @@ def _get_config(project_id, auth_token):
 # Packages
 #
 # -----------------------------------------------------------------------------
-def get_packages(name=None,
-                 phase=[],
+def get_packages(phase=[],
                  project_id=None,
                  auth_token=None):
 	"""
@@ -124,9 +122,10 @@ def get_packages(name=None,
 	}
 	url = "https://gacatalog.apps.rapyuta.io/v2/catalog?%s" % urlencode(params, doseq=True)
 
-	response =  __utils__['http.query'](url=url,
-	                                    header_dict=header_dict,
-	                                    method="GET")
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET",
+	                                   status=True)
 
 	if 'error' in response:
 		if response['status'] != 404:
@@ -135,32 +134,16 @@ def get_packages(name=None,
 			return []
 
 	# The response "body" will be string of JSON
-	try:
-		response_body = __utils__['json.loads'](response['body'])
-	except JSONDecodeError as e:
-		raise CommandExecutionError(e)
+	response_body = __utils__['json.loads'](response['body'])
 
 	# The packages are listed under the "services" key
-	try:
-		packages = response_body['services']
-	except KeyError as e:
-		log.debug(response_body)
-		raise CommandExecutionError(e)
-
-	if name is not None:
-		packages = [
-			pkg for pkg in packages if pkg['name'] == name
-		]
-
-	log.debug(packages)
-
-	return packages
+	return response_body['services']
 
 
 
-def get_package(package_uid=None,
-                name=None,
+def get_package(name=None,
                 version=None,
+                guid=None,
                 project_id=None,
                 auth_token=None):
 	"""
@@ -174,7 +157,7 @@ def get_package(package_uid=None,
 
 		string
 
-	package_uid
+	guid
 
 		string
 
@@ -193,69 +176,63 @@ def get_package(package_uid=None,
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	if package_uid is None:
-		if name is not None and version is not None:
-			#
-			# Fetch a single package via its name and version
-			#
-			packages = get_packages(name=name,
-			                        project_id=project_id,
-			                        auth_token=auth_token)
-
-			# Don't try to process an error response
-			if 'error' in packages:
-				return packages
-
-			# Need to accept version with and without the 'v' prefix
-			if version[0] != 'v':
-				version = 'v' + version
-
-			# Return the first package that matches the version
-			for pkg_summary in packages:
-				if pkg_summary['metadata']['packageVersion'] == version:
-					package_uid = pkg_summary['id']
-		else:
+	if guid is None:
+		if name is None or version is None:
 			raise SaltInvocationError(
-				"Require either 'package_uid', or 'name' and 'version'"
+				"Require either 'guid', or 'name' and 'version'"
 			)
 
-	if package_uid is not None:
 		#
-		# Fetch a single package via its UID
+		# Fetch a single package via its name and version
 		#
-		url = "https://gacatalog.apps.rapyuta.io/serviceclass/status"
-		header_dict = {
-			"accept": "application/json",
-			"project": project_id,
-			"Authorization": "Bearer " + auth_token,
-		}
-		data = {
-			"package_uid": package_uid,
-		}
-		response =  __utils__['http.query'](url=url,
-		                                    header_dict=header_dict,
-		                                    method="GET",
-		                                    params=data,
-		                                    status=True)
+		packages = get_packages(project_id=project_id,
+		                        auth_token=auth_token)
 
-		if 'error' in response:
-			if response['status'] != 404:
-				raise CommandExecutionError(response['error'])
-			else:
-				return False
+		# Need to accept version with and without the 'v' prefix
+		if version[0] != 'v':
+			version = 'v' + version
 
-		return __utils__['json.loads'](response['body'])
+		# Return the first package that matches the version
+		for pkg_summary in packages:
+			if pkg_summary['name'] == name and pkg_summary['metadata']['packageVersion'] == version:
+				guid = pkg_summary['id']
 
-	return False
+	if guid is None:
+		return False
+
+	#
+	# Fetch a single package via its UID
+	#
+	url = "https://gacatalog.apps.rapyuta.io/serviceclass/status"
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+	}
+	data = {
+		"package_uid": guid,
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET",
+	                                   params=data,
+	                                   status=True)
+
+	if 'error' in response:
+		if response['status'] == 404:
+			return False
+		else:
+			raise CommandExecutionError(response['error'])
+
+	return __utils__['json.loads'](response['body'])
 
 
 
-def delete_package(package_uid=None,
-                   name=None,
+def delete_package(name=None,
                    version=None,
+                   guid=None,
                    project_id=None,
-                   auth_token=None,
-                   ):
+                   auth_token=None):
 	"""
 	Delete a package
 
@@ -266,24 +243,24 @@ def delete_package(package_uid=None,
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	if package_uid is None:
-		if name is not None and version is not None:
-			#
-			# Fetch the package UID using its name and version
-			#
-			package = get_package(name=name,
-			                      version=version,
-			                      project_id=project_id,
-			                      auth_token=auth_token)
-
-			if 'error' in package:
-				return package
-
-			package_uid = package['packageInfo']['guid']
-		else:
+	if guid is None:
+		if name is None or version is None:
 			raise SaltInvocationError(
-				"Require either 'package_uid', or 'name' and 'version'"
+				"Require either 'guid', or 'name' and 'version'"
 			)
+
+		#
+		# Fetch the package UID using its name and version
+		#
+		package = get_package(name=name,
+		                      version=version,
+		                      project_id=project_id,
+		                      auth_token=auth_token)
+
+		if package is False:
+			return False
+
+		guid = package['packageInfo']['guid']
 
 	#
 	# Send the delete request
@@ -295,13 +272,13 @@ def delete_package(package_uid=None,
 		"Authorization": "Bearer " + auth_token,
 	}
 	data = {
-		"package_uid": package_uid,
+		"package_uid": guid,
 	}
-	response =  __utils__['http.query'](url=url,
-	                                    header_dict=header_dict,
-	                                    method="DELETE",
-	                                    params=data,
-	                                    status=True)
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="DELETE",
+	                                   params=data,
+	                                   status=True)
 
 	if response['status'] == 200:
 		return True
@@ -317,8 +294,7 @@ def delete_package(package_uid=None,
 def create_package(source=None,
                    content=None,
                    project_id=None,
-                   auth_token=None,
-                   dry_run=False):
+                   auth_token=None):
 	"""
 	Upload a package manifest
 	"""
@@ -333,7 +309,7 @@ def create_package(source=None,
 		file_name = __salt__["cp.cache_file"](source)
 
 		if file_name is not False:
-			with salt.utils.files.fopen(file_name, "r") as _f:
+			with __utils__['files.fopen'](file_name, "r") as _f:
 				file_name_part, file_extension = os.path.splitext(file_name)
 
 				if file_extension == '.json':
@@ -390,10 +366,10 @@ def get_networks(project_id=None,
 		"Authorization": "Bearer " + auth_token,
 	}
 
-	response =  __utils__['http.query'](url=url,
-	                                    header_dict=header_dict,
-	                                    method="GET",
-	                                    status=True)
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET",
+	                                   status=True)
 
 	if 'error' in response:
 		raise CommandExecutionError(
@@ -413,8 +389,8 @@ def get_networks(project_id=None,
 
 
 
-def get_network(network_guid=None,
-                name=None,
+def get_network(name=None,
+                guid=None,
                 project_id=None,
                 auth_token=None):
 	"""
@@ -422,26 +398,27 @@ def get_network(network_guid=None,
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	if network_guid is None:
+	if guid is None:
 		if name is None:
 			raise SaltInvocationError(
 				"get_network needs either a valid guid or name"
 			)
 
-		networks = get_networks(project_id=project_id, auth_token=auth_token)
+		networks = get_networks(project_id=project_id,
+		                        auth_token=auth_token)
 
 		for network in networks:
 			if network['name'] == name:
 				if network['internalDeploymentStatus']['phase'] in ['In Progress', 'Succeeded', 'Provisioning']:
-					network_guid = network['guid']
+					guid = network['guid']
 					break
 
-	if network_guid is None:
-		# We have no network_guid and the name didn't
+	if guid is None:
+		# We have no guid and the name didn't
 		# match an existing network so we return False
 		return False
 
-	url = "https://gacatalog.apps.rapyuta.io/routednetwork/%s" % network_guid
+	url = "https://gacatalog.apps.rapyuta.io/routednetwork/%s" % guid
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -502,8 +479,8 @@ def create_network(name,
 
 
 
-def delete_network(network_guid=None,
-                   name=None,
+def delete_network(name=None,
+                   guid=None,
                    project_id=None,
                    auth_token=None):
 	"""
@@ -511,19 +488,20 @@ def delete_network(network_guid=None,
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
 	if name is not None:
-		networks = get_networks(project_id=project_id, auth_token=auth_token)
+		networks = get_networks(project_id=project_id,
+		                        auth_token=auth_token)
 
 		for network in networks:
 			if network['name'] == name:
-				network_guid = network['guid']
+				guid = network['guid']
 				break
 
-	if network_guid is None:
+	if guid is None:
 		raise CommandExecutionError(
 			"delete_network needs either a valid guid or name"
 		)
 
-	url = "https://gacatalog.apps.rapyuta.io/routednetwork/%s" % network_guid
+	url = "https://gacatalog.apps.rapyuta.io/routednetwork/%s" % guid
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -573,21 +551,19 @@ def get_deployments(package_uid=None,
 
 	url = "https://gacatalog.apps.rapyuta.io/deployment/list?%s" % urlencode(params, doseq=True)
 
-	response =  __utils__['http.query'](url=url,
-	                                    header_dict=header_dict,
-	                                    method="GET",
-	                                    status=True)
-
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET",
+	                                   status=True)
 	if 'error' in response:
 		raise CommandExecutionError(
 			response['error']
 		)
-
 	return __utils__['json.loads'](response['body'])
 
 
-def get_deployment(deploymentid=None,
-                   name=None,
+def get_deployment(name=None,
+                   deployment_id=None,
                    project_id=None,
                    auth_token=None):
 	"""
@@ -595,18 +571,19 @@ def get_deployment(deploymentid=None,
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
 	if name is not None:
-		deployments = get_deployments(project_id=project_id, auth_token=auth_token)
+		deployments = get_deployments(project_id=project_id,
+		                              auth_token=auth_token)
 
 		for deployment in deployments:
 			if deployment['name'] == name:
-				deploymentid = deployment['deploymentId']
+				deployment_id = deployment['deploymentId']
 
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
 		"Authorization": "Bearer " + auth_token,
 	}
-	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s" % deploymentid
+	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s" % deployment_id
 
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
@@ -626,13 +603,21 @@ def get_deployment(deploymentid=None,
 
 
 def create_deployment(name,
-                      package_uid,
-                      routed_networks=[],
+                      package_uid=None,
+                      package_name=None,
+                      package_version=None,
+                      networks=[],
                       project_id=None,
                       auth_token=None):
 	"""
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if package_uid is None:
+		if package_name is None or package_version is None:
+			raise SaltInvocationError(
+				"create_deployment requires package_uid, or package_name and package_version"
+			)
 
 	# {
 	# 	"accepts_incomplete": true,
@@ -666,10 +651,14 @@ def create_deployment(name,
 	#
 	# Create provision configuration
 	#
-	package = get_package(package_uid=package_uid,
+	package = get_package(name=package_name,
+	                      version=package_version,
+	                      package_uid=package_uid,
 	                      project_id=project_id,
 	                      auth_token=auth_token)
+
 	plan = package['packageInfo']['plans'][0]
+
 	provision_configuration = {
 		"accepts_incomplete": True,
 		"api_version": '1.0.0',
@@ -709,15 +698,15 @@ def create_deployment(name,
 	#
 	all_routed_networks = get_networks(project_id=project_id,
 	                                   auth_token=auth_token)
-	routed_network_names = routed_networks.split(",")
-	routed_network_guids = []
+	network_names = networks.split(",")
+	network_guids = []
 	for network in all_routed_networks:
-		if network['name'] in routed_network_names:
-			routed_network_guids.append({
+		if network['name'] in network_names:
+			network_guids.append({
 				"guid": network['guid']
 			})
 
-	provision_configuration['context']['routedNetworks'] = routed_network_guids
+	provision_configuration['context']['routedNetworks'] = network_guids
 
 	#
 	# Provision
@@ -758,10 +747,10 @@ def create_deployment(name,
 
 
 
-def delete_deployment(deploymentid=None,
+def delete_deployment(name=None,
+                      deployment_id=None,
                       package_uid=None,
                       plan_id=None,
-                      name=None,
                       project_id=None,
                       auth_token=None):
 	"""
@@ -771,14 +760,10 @@ def delete_deployment(deploymentid=None,
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	if name is not None:
-		deployment = get_deployment(name=name,
-		                            project_id=None,
-		                            auth_token=None)
-	else:
-		deployment = get_deployment(deploymentid=deploymentid,
-		                            project_id=None,
-		                            auth_token=None)
+	deployment = get_deployment(name=name,
+	                            deployment_id=deployment_id,
+	                            project_id=None,
+	                            auth_token=None)
 
 	header_dict = {
 		"accept": "application/json",
@@ -786,10 +771,10 @@ def delete_deployment(deploymentid=None,
 		"Authorization": "Bearer " + auth_token,
 	}
 	params = {
-		"service_id": package_uid,
-		"plan_id": plan_id,
+		"service_id": deployment['packageId'],
+		"plan_id": deployment['planId'],
 	}
-	url = "https://gacatalog.apps.rapyuta.io/v2/service_instances/%s" % deploymentid
+	url = "https://gacatalog.apps.rapyuta.io/v2/service_instances/%s" % deployment_id
 
 	return __utils__['http.query'](url=url,
 	                               header_dict=header_dict,
@@ -798,7 +783,7 @@ def delete_deployment(deploymentid=None,
 
 
 
-def get_dependencies(deploymentid,
+def get_dependencies(deployment_id,
                      project_id=None,
                      auth_token=None):
 	"""
@@ -810,7 +795,7 @@ def get_dependencies(deploymentid,
 		"project": project_id,
 		"Authorization": "Bearer " + auth_token,
 	}
-	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s/dependencies" % deploymentid
+	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s/dependencies" % deployment_id
 
 	return __utils__['http.query'](url=url,
 	                               header_dict=header_dict,
@@ -818,7 +803,7 @@ def get_dependencies(deploymentid,
 
 
 
-def get_manifest(package_uid,
+def get_manifest(guid,
                  project_id=None,
                  auth_token=None):
 	"""
@@ -826,7 +811,7 @@ def get_manifest(package_uid,
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	package = get_package(package_uid=package_uid,
+	package = get_package(guid=guid,
 	                      project_id=project_id,
 	                      auth_token=auth_token)
 
@@ -839,7 +824,8 @@ def get_manifest(package_uid,
 	}
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
-	                                   method="GET")
+	                                   method="GET",
+	                                   status=True)
 
 	if 'error' in response:
 		raise CommandExecutionError(
@@ -895,8 +881,8 @@ def get_devices(tgt=None,
 
 
 
-def get_device(device_id=None,
-               name=None,
+def get_device(name=None,
+               device_id=None,
                project_id=None,
                auth_token=None):
 	"""
@@ -1029,8 +1015,8 @@ def get_metrics(name=None,
 				"get_device requires device_id or name"
 			)
 
-		device = get_device(device_id=device_id,
-		                    name=name,
+		device = get_device(name=name,
+		                    device_id=device_id,
 		                    project_id=project_id,
 		                    auth_token=auth_token)
 
@@ -1072,8 +1058,8 @@ def add_metrics(name=None,
 				"get_device requires device_id or name"
 			)
 
-		device = get_device(device_id=device_id,
-		                    name=name,
+		device = get_device(name=name,
+		                    device_id=device_id,
 		                    project_id=project_id,
 		                    auth_token=auth_token)
 
@@ -1138,8 +1124,8 @@ def get_topics(name=None,
 				"get_device requires device_id or name"
 			)
 
-		device = get_device(device_id=device_id,
-		                    name=name,
+		device = get_device(name=name,
+		                    evice_id=device_id,
 		                    project_id=project_id,
 		                    auth_token=auth_token)
 
