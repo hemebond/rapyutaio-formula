@@ -928,8 +928,8 @@ def get_device(name=None,
 # Commands
 #
 # -----------------------------------------------------------------------------
-def cmd(tgt,
-        cmd,
+def cmd(cmd,
+        tgt,
         shell=None,
         env={},
         bg=False,
@@ -946,15 +946,16 @@ def cmd(tgt,
 	#
 	all_devices = get_devices(project_id=project_id, auth_token=auth_token)
 
-	devices = [
-		device['uuid']
+	# A dict of devices to send the command, also serves as a UUID to name lookup
+	device_names = {
+		device['uuid']: device['name']
 		for device
 		in all_devices
 		if __salt__['match.compound'](tgt, device['name'])
 		and device['status'] == "ONLINE"
-	]
+	}
 
-	if devices:
+	if device_names:
 		url = CORE_API_HOST + DEVICE_COMMAND_API_PATH
 		header_dict = {
 			"accept": "application/json",
@@ -978,7 +979,7 @@ def cmd(tgt,
 			    'cwd']
 			and val
 		}
-		command.update({"device_ids": devices})
+		command.update({"device_ids": list(device_names.keys())})
 
 		response = __utils__['http.query'](url=url,
 		                                   header_dict=header_dict,
@@ -989,9 +990,14 @@ def cmd(tgt,
 			raise CommandExecutionError(
 				response['error']
 			)
-
 		response_body = __utils__['json.loads'](response['body'])
-		return response_body['response']['data']
+
+		# Response uses device UUID as key, change to device name
+		return {
+			device_names[uuid]: output
+			for uuid, output
+			in response_body['response']['data'].items()
+		}
 
 	return False
 
