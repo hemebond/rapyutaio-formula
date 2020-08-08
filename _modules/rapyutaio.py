@@ -189,13 +189,14 @@ def get_package(name=None,
 		                        auth_token=auth_token)
 
 		# Need to accept version with and without the 'v' prefix
-		if version[0] != 'v':
-			version = 'v' + version
+		if version[0] == 'v':
+			version = version[1:]
 
 		# Return the first package that matches the version
 		for pkg_summary in packages:
-			if pkg_summary['name'] == name and pkg_summary['metadata']['packageVersion'] == version:
-				guid = pkg_summary['id']
+			if pkg_summary['name'] == name:
+				if pkg_summary['metadata']['packageVersion'] == version:
+					guid = pkg_summary['id']
 
 	if guid is None:
 		return False

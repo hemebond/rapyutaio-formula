@@ -143,13 +143,15 @@ def package_present(name,
 			return ret
 
 	#
-	# Find out what changes would be made
+	# Test
 	#
 	if __opts__['test']:
 		# Always return a None result for dry-runs
 		ret['result'] = None
 
-		if old_manifest is not None:
+		log.debug(old_manifest)
+
+		if old_manifest:
 			if ret['changes']:
 				ret['comment'] = "Package '{} {}' would be updated".format(man_name, man_version)
 
@@ -167,6 +169,9 @@ def package_present(name,
 				}
 
 		return ret
+
+	# TODO: Create a "clean" manifest from the remote/existing manifest that only contains keys
+	# that we know are required or will be used and compare only those
 
 	#
 	# Delete the existing manifest if it exists and is different to the new manifest
