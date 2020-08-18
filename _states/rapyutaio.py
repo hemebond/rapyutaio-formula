@@ -91,8 +91,6 @@ def package_present(name,
 			with __utils__['files.fopen'](file_name, "r") as _f:
 				file_name_part, file_extension = os.path.splitext(file_name)
 
-				log.debug(file_extension)
-
 				if file_extension == '.json':
 					new_manifest = __utils__['json.load'](_f)
 				elif file_extension in ['.yaml', '.yml']:
@@ -129,7 +127,7 @@ def package_present(name,
 		old_package_uid = old_package['packageInfo']['guid']
 		old_manifest = __salt__['rapyutaio.get_manifest'](guid=old_package_uid)
 	else:
-		old_manifest = None
+		old_manifest = {}
 
 	if old_manifest:
 		# Is the new manifest different to the old
@@ -149,24 +147,18 @@ def package_present(name,
 		# Always return a None result for dry-runs
 		ret['result'] = None
 
-		log.debug(old_manifest)
+		if ret['changes']:
+			ret['comment'] = "Package '{} {}' would be updated".format(man_name, man_version)
 
-		if old_manifest:
-			if ret['changes']:
-				ret['comment'] = "Package '{} {}' would be updated".format(man_name, man_version)
-
-				if not show_changes:
-					ret['changes'] = "<show_changes=False>"
 		else:
 			ret['comment'] = "New package '{} {}' would be created".format(man_name, man_version)
+			ret['changes'] = {
+				'new': new_manifest,
+				'old': old_manifest
+			}
 
-			if not show_changes:
-				ret['changes'] = "<show_changes=False>"
-			else:
-				ret['changes'] = {
-					'new': content,
-					'old': None
-				}
+		if not show_changes:
+			ret['changes'] = "<show_changes=False>"
 
 		return ret
 
@@ -271,6 +263,13 @@ def network_present(name,
 
 	old_network = __salt__['rapyutaio.get_network'](name=name)
 
+	new_network = {
+		"name": name,
+		"runtime": runtime,
+		"rosDistro": ros_distro,
+		"parameters": parameters or {},
+	}
+
 	if old_network:
 		log.debug(old_network)
 		ret['changes'] = __utils__['data.recursive_diff'](
@@ -279,30 +278,35 @@ def network_present(name,
 				"runtime": old_network['runtime'],
 				"rosDistro": old_network['rosDistro'],
 				"parameters": old_network.get('parameters', {}),
-			}, {
-				"name": name,
-				"runtime": runtime,
-				"rosDistro": ros_distro,
-				"parameters": parameters or {},
-			}
+			},
+			new_network
 		)
 
 		if ret['changes']:
 			ret['result'] = False
-			ret['comment'] = "Network {0} exists but is different.".format(name)
+			ret['comment'] = "Network '{0}' exists but is different.".format(name)
 		else:
 			ret['result'] = True
-			ret['comment'] = "Network {0} is in the correct state.".format(name)
+			ret['comment'] = "Network '{0}' is in the correct state.".format(name)
 
 		return ret
 
-	__salt__['rapyutaio.create_network'](name=name,
-	                                     runtime=runtime,
-	                                     ros_distro=ros_distro,
-	                                     parameters=parameters)
+	if __opts__['test']:
+		# Always return a None result for dry-runs
+		ret['result'] = None
+		ret['comment'] = "Network '{0}' would be created.".format(name)
+		ret['changes']['old'] = {}
+		ret['changes']['new'] = new_network
+		return ret
+
+	response = __salt__['rapyutaio.create_network'](name=name,
+	                                                runtime=runtime,
+	                                                ros_distro=ros_distro,
+	                                                parameters=parameters)
 
 	ret['result'] = True
 	ret['comment'] = "New network {0} created".format(name)
+	ret['changes'] = response
 
 	return ret
 
@@ -365,3 +369,48 @@ def volume_attached():
 
 def volume_absent():
 	pass
+
+
+
+# -----------------------------------------------------------------------------
+#
+# Deployments
+#
+# -----------------------------------------------------------------------------
+def deployment_present(name,
+                       package_name,
+                       package_version,
+                       parameters={}):
+	ret = {
+		"name": name,
+		"result": False,
+		"comment": "",
+		"changes": {},
+	}
+
+	existing_deployment = __salt__['rapyutaio.get_deployment'](name=name)
+
+	#
+	# TODO: check the properties of the deployment
+	# to make sure the deployment parameters are the same
+	#
+
+	if __opts__['test']:
+		ret['result'] = None
+
+		if existing_deployment:
+			ret['comment'] = "Deployment '{0}' already exists".format(name)
+		else:
+			ret['comment'] = "Deployment '{0}' would be created".format(name)
+
+		return ret
+
+	deployment = __salt__['rapyutaio.create_deployment'](name=name,
+	                                                     package_name=package_name,
+	                                                     package_version=package_version,
+	                                                     parameters=parameters)
+
+	ret['result'] = True
+	ret['comment'] = "Deployment '{0}' created".format(name)
+	ret['changes'] = deployment
+	return ret

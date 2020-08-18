@@ -564,7 +564,7 @@ def get_deployments(package_uid=None,
 
 
 def get_deployment(name=None,
-                   deployment_id=None,
+                   id=None,
                    project_id=None,
                    auth_token=None):
 	"""
@@ -577,14 +577,14 @@ def get_deployment(name=None,
 
 		for deployment in deployments:
 			if deployment['name'] == name:
-				deployment_id = deployment['deploymentId']
+				id = deployment['deploymentId']
 
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
 		"Authorization": "Bearer " + auth_token,
 	}
-	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s" % deployment_id
+	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s" % id
 
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
@@ -607,7 +607,8 @@ def create_deployment(name,
                       package_uid=None,
                       package_name=None,
                       package_version=None,
-                      networks=[],
+                      networks=None,
+                      parameters={},
                       project_id=None,
                       auth_token=None):
 	"""
@@ -654,11 +655,16 @@ def create_deployment(name,
 	#
 	package = get_package(name=package_name,
 	                      version=package_version,
-	                      package_uid=package_uid,
+	                      guid=package_uid,
 	                      project_id=project_id,
 	                      auth_token=auth_token)
 
-	plan = package['packageInfo']['plans'][0]
+	if package:
+		plan = package['packageInfo']['plans'][0]
+	else:
+		raise CommandExecutionError(
+			"Could not find package '{0}'".format(package_name)
+		)
 
 	provision_configuration = {
 		"accepts_incomplete": True,
@@ -672,7 +678,7 @@ def create_deployment(name,
 			"global": {},
 		},
 		"plan_id": plan['planId'],
-		"service_id": package_uid,
+		"service_id": package['packageInfo']['guid'],
 		"space_guid": "spaceGuid",
 		'instance_id': 'instanceId',
 		'organization_guid': 'organizationGuid',
@@ -682,32 +688,37 @@ def create_deployment(name,
 		for internal_component in plan['internalComponents']:
 			if internal_component['componentName'] == component['name']:
 				component_id = internal_component['componentId']
+				break
 
-		parameters = {
+		component_parameters = {
 			"component_id": component_id,
-			"bridge_params": {
-				"alias": component['name']
-			}
+			# "bridge_params": {
+			# 	"alias": component['name']
+			# }
 		}
-		for params in component['parameters']:
-			parameters[params['name']] = params.get('default', None)
+		for pkg_parameter in component['parameters']:
+			# component_parameters[pkg_parameter['name']] = pkg_parameter.get('default', None)
+			component_parameters[pkg_parameter['name']] = parameters.get(component['name'], {}).get(pkg_parameter['name'], pkg_parameter.get('default', None))
 
-		provision_configuration['parameters'][component_id] = parameters
+		provision_configuration['parameters'][component_id] = component_parameters
 
 	#
 	# Add routed networks
 	#
-	all_routed_networks = get_networks(project_id=project_id,
-	                                   auth_token=auth_token)
-	network_names = networks.split(",")
-	network_guids = []
-	for network in all_routed_networks:
-		if network['name'] in network_names:
-			network_guids.append({
-				"guid": network['guid']
-			})
+	if networks is not None:
+		all_routed_networks = get_networks(project_id=project_id,
+		                                   auth_token=auth_token)
+		network_names = networks.split(",")
+		network_guids = []
+		for network in all_routed_networks:
+			if network['name'] in network_names:
+				network_guids.append({
+					"guid": network['guid']
+				})
 
-	provision_configuration['context']['routedNetworks'] = network_guids
+		provision_configuration['context']['routedNetworks'] = network_guids
+
+	log.debug(provision_configuration)
 
 	#
 	# Provision
@@ -738,7 +749,7 @@ def create_deployment(name,
 	while deployment_phase in list(map(str, [phase.INPROGRESS, phase.PROVISIONING])):
 		sleep(10)
 
-		deployment = get_deployment(deployment_id)
+		deployment = get_deployment(id=deployment_id)
 		deployment_phase = deployment['phase']
 
 	if deployment_phase == str(phase.SUCCEEDED):
@@ -749,7 +760,7 @@ def create_deployment(name,
 
 
 def delete_deployment(name=None,
-                      deployment_id=None,
+                      id=None,
                       package_uid=None,
                       plan_id=None,
                       project_id=None,
@@ -762,7 +773,7 @@ def delete_deployment(name=None,
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
 	deployment = get_deployment(name=name,
-	                            deployment_id=deployment_id,
+	                            id=id,
 	                            project_id=None,
 	                            auth_token=None)
 
@@ -775,7 +786,7 @@ def delete_deployment(name=None,
 		"service_id": deployment['packageId'],
 		"plan_id": deployment['planId'],
 	}
-	url = "https://gacatalog.apps.rapyuta.io/v2/service_instances/%s" % deployment_id
+	url = "https://gacatalog.apps.rapyuta.io/v2/service_instances/%s" % id
 
 	return __utils__['http.query'](url=url,
 	                               header_dict=header_dict,
