@@ -786,7 +786,7 @@ def delete_deployment(name=None,
 		"service_id": deployment['packageId'],
 		"plan_id": deployment['planId'],
 	}
-	url = "https://gacatalog.apps.rapyuta.io/v2/service_instances/%s" % id
+	url = "https://gacatalog.apps.rapyuta.io/v2/service_instances/%s" % deployment['deploymentId']
 
 	return __utils__['http.query'](url=url,
 	                               header_dict=header_dict,

@@ -411,6 +411,35 @@ def deployment_present(name,
 	                                                     parameters=parameters)
 
 	ret['result'] = True
+	ret['changes']['new'] = name
 	ret['comment'] = "Deployment '{0}' created".format(name)
-	ret['changes'] = deployment
+	return ret
+
+
+
+def deployment_absent(name):
+	ret = {
+		"name": name,
+		"result": False,
+		"comment": "",
+		"changes": {},
+	}
+
+	existing_deployment = __salt__['rapyutaio.get_deployment'](name=name)
+
+	if not existing_deployment:
+		ret['result'] = True
+		ret['comment'] = "Deployment '{0}' is not present".format(name)
+		return ret
+
+	if __opts__['test']:
+		ret['result'] = None
+		ret['comment'] = "Deployment '{0}' would be removed".format(name)
+		return ret
+
+	response = __salt__['rapyutaio.delete_deployment'](name=name)
+
+	ret['result'] = True
+	ret['changes']['removed'] = name
+	ret['comment'] = "Deployment '{0}' removed".format(name)
 	return ret
