@@ -194,9 +194,15 @@ def get_package(name=None,
 
 		# Return the first package that matches the version
 		for pkg_summary in packages:
+			pkg_version = pkg_summary['metadata']['packageVersion']
+
+			if pkg_version[0] == 'v':
+				pkg_version = pkg_version[1:]
+
 			if pkg_summary['name'] == name:
-				if pkg_summary['metadata']['packageVersion'] == version:
+				if pkg_version == version:
 					guid = pkg_summary['id']
+					break
 
 	if guid is None:
 		return False
