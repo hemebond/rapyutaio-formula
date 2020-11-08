@@ -387,7 +387,8 @@ def volume_absent():
 def deployment_present(name,
                        package_name,
                        package_version,
-                       parameters={}):
+                       parameters={},
+                       dependencies=[]):
 	ret = {
 		"name": name,
 		"result": False,
@@ -396,6 +397,21 @@ def deployment_present(name,
 	}
 
 	existing_deployment = __salt__['rapyutaio.get_deployment'](name=name)
+
+	if existing_deployment is not None:
+		pkg_id = existing_deployment['packageId']
+		existing_dpl_pkg = __salt__['rapyutaio.get_package'](name=package_name,
+		                                                     version=package_version)
+		log.fatal(existing_dpl_pkg)
+		if pkg_id == existing_dpl_pkg['packageInfo']['guid']:
+			ret['result'] = True
+			ret['comment'] = "Deployment {} of package {}:{} already exists".format(name, package_name, package_version)
+			return ret
+
+		log.fatal(existing_deployment)
+		# for component in existing_deployment
+
+		# ret['changes'] = __utils__['data.recursive_diff'](existing_deployment, new_manifest)
 
 	#
 	# TODO: check the properties of the deployment
@@ -416,7 +432,8 @@ def deployment_present(name,
 		deployment = __salt__['rapyutaio.create_deployment'](name=name,
 		                                                     package_name=package_name,
 		                                                     package_version=package_version,
-		                                                     parameters=parameters)
+		                                                     parameters=parameters,
+		                                                     dependencies=dependencies)
 	except CommandExecutionError as e:
 		ret['result'] = False
 		ret['comment'] = str(e)

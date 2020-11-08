@@ -615,6 +615,7 @@ def create_deployment(name,
                       package_version=None,
                       networks=None,
                       parameters={},
+                      dependencies=[],
                       project_id=None,
                       auth_token=None):
 	"""
@@ -724,7 +725,16 @@ def create_deployment(name,
 
 		provision_configuration['context']['routedNetworks'] = network_guids
 
-	log.debug(provision_configuration)
+	#
+	# Dependencies
+	#
+	for dep_name in dependencies:
+		dep_dpl = __salt__['rapyutaio.get_deployment'](name=dep_name)
+
+		if dep_dpl is not None:
+			provision_configuration['context']['dependentDeployments'].append({
+				"dependentDeploymentId": dep_dpl['deploymentId']
+			})
 
 	#
 	# Provision
