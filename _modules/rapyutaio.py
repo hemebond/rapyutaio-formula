@@ -299,7 +299,7 @@ def delete_package(name=None,
 
 
 def create_package(source=None,
-                   content=None,
+                   manifest=None,
                    project_id=None,
                    auth_token=None):
 	"""
@@ -307,10 +307,10 @@ def create_package(source=None,
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	if content is None:
+	if manifest is None:
 		if source is None:
 			raise SaltInvocationError(
-				"create_or_update_package requires either source or content"
+				"create_or_update_package requires either source or manifest"
 			)
 
 		file_name = __salt__["cp.cache_file"](source)
@@ -320,9 +320,9 @@ def create_package(source=None,
 				file_name_part, file_extension = os.path.splitext(file_name)
 
 				if file_extension == '.json':
-					content = __utils__['json.load'](_f)
+					manifest = __utils__['json.load'](_f)
 				elif file_extension in ['.yaml', '.yml']:
-					content = __utils__['yaml.load'](_f)
+					manifest = __utils__['yaml.load'](_f)
 				else:
 					raise SaltInvocationError(
 						"Source file must be a JSON (.json) or YAML (.yaml, .yml) file"
@@ -341,7 +341,7 @@ def create_package(source=None,
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
 	                                   method="POST",
-	                                   data=__utils__['json.dumps'](content),
+	                                   data=__utils__['json.dumps'](manifest),
 	                                   status=True)
 
 	if 'error' in response:

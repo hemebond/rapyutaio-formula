@@ -66,7 +66,7 @@ def __virtual__():
 # -----------------------------------------------------------------------------
 def package_present(name,
                     source=None,
-                    content=None,
+                    manifest=None,
                     show_changes=True):
 	"""
 	"""
@@ -80,9 +80,9 @@ def package_present(name,
 	#
 	# Get the content of the new manifest
 	#
-	if content is None:
+	if manifest is None:
 		if source is None:
-			ret['comment'] = "package_present requires either 'source' or 'content'"
+			ret['comment'] = "package_present requires either 'source' or 'manifest'"
 			return ret
 
 		file_name = __salt__["cp.cache_file"](source)
@@ -102,7 +102,7 @@ def package_present(name,
 			ret['comment'] = "Source file '{}' missing".format(source)
 			return ret
 	else:
-		new_manifest = content
+		new_manifest = manifest
 
 	#
 	# Allow setting the name via the state
@@ -137,7 +137,6 @@ def package_present(name,
 			# The manifest is already in the correct state so return immediately
 			ret['result'] = True
 			ret['comment'] = "Package '{} {}' is in the correct state".format(man_name, man_version)
-			ret['changes'] = {}
 			return ret
 
 	#
@@ -169,19 +168,27 @@ def package_present(name,
 	# Delete the existing manifest if it exists and is different to the new manifest
 	#
 	if old_manifest is not None:
-		if ret['changes']:
-			try:
-				__salt__['rapyutaio.delete_package'](guid=old_package_uid)
-			except CommandExecutionError as e:
-				ret['comment'] = e
-				return ret
-		else:
+		if not ret['changes']:
 			ret['comment'] = "Package '{} {}' is in the correct state".format(man_name, man_version)
+			ret['result'] = True
+			return ret
+
+		# First check that the package is not in use
+		pkg_deployments = __salt__['rapyutaio.get_deployments'](package_uid=old_package_uid)
+		if pkg_deployments != []:
+			ret['comment'] = "Package '{} {}' is in use and can't be updated.".format(man_name, man_version)
+			return ret
+
+		try:
+			__salt__['rapyutaio.delete_package'](guid=old_package_uid)
+		except CommandExecutionError as e:
+			ret['comment'] = e
+			return ret
 
 	#
 	# Attempt to upload the new manifest
 	#
-	response = __salt__['rapyutaio.create_package'](content=new_manifest)
+	response = __salt__['rapyutaio.create_package'](manifest=new_manifest)
 
 	ret['result'] = True
 
@@ -405,10 +412,15 @@ def deployment_present(name,
 
 		return ret
 
-	deployment = __salt__['rapyutaio.create_deployment'](name=name,
-	                                                     package_name=package_name,
-	                                                     package_version=package_version,
-	                                                     parameters=parameters)
+	try:
+		deployment = __salt__['rapyutaio.create_deployment'](name=name,
+		                                                     package_name=package_name,
+		                                                     package_version=package_version,
+		                                                     parameters=parameters)
+	except CommandExecutionError as e:
+		ret['result'] = False
+		ret['comment'] = str(e)
+		return ret
 
 	ret['result'] = True
 	ret['changes']['new'] = name
