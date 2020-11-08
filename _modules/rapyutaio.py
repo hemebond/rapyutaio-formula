@@ -599,7 +599,7 @@ def get_deployment(name=None,
 
 	if 'error' in response:
 		if response['status'] == 404:
-			return False
+			return None
 
 		raise CommandExecutionError(
 			response['error']
@@ -782,6 +782,9 @@ def delete_deployment(name=None,
 	                            id=id,
 	                            project_id=None,
 	                            auth_token=None)
+
+	if deployment is None:
+		return "Deployment {} does not exist".format(name)
 
 	header_dict = {
 		"accept": "application/json",
