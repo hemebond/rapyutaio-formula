@@ -120,7 +120,7 @@ def get_packages(phase=[],
 	params = {
 		'phase': phase,
 	}
-	url = "https://gacatalog.apps.rapyuta.io/v2/catalog?%s" % urlencode(params, doseq=True)
+	url = CATALOG_HOST + "/v2/catalog?%s" % urlencode(params, doseq=True)
 
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
@@ -210,7 +210,7 @@ def get_package(name=None,
 	#
 	# Fetch a single package via its UID
 	#
-	url = "https://gacatalog.apps.rapyuta.io/serviceclass/status"
+	url = CATALOG_HOST + "/serviceclass/status"
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -272,7 +272,7 @@ def delete_package(name=None,
 	#
 	# Send the delete request
 	#
-	url = "https://gacatalog.apps.rapyuta.io/serviceclass/delete"
+	url = CATALOG_HOST + "/serviceclass/delete"
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -332,7 +332,7 @@ def create_package(source=None,
 				"File '{}' does not exist".format(file_name)
 			)
 
-	url = "https://gacatalog.apps.rapyuta.io/serviceclass/add"
+	url = CATALOG_HOST + "/serviceclass/add"
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -366,7 +366,7 @@ def get_networks(project_id=None,
 
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	url = "https://gacatalog.apps.rapyuta.io/routednetwork"
+	url = CATALOG_HOST + "/routednetwork"
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -425,7 +425,7 @@ def get_network(name=None,
 		# match an existing network so we return False
 		return False
 
-	url = "https://gacatalog.apps.rapyuta.io/routednetwork/%s" % guid
+	url = CATALOG_HOST + "/routednetwork/%s" % guid
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -458,7 +458,7 @@ def create_network(name,
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	url = "https://gacatalog.apps.rapyuta.io/routednetwork"
+	url = CATALOG_HOST + "/routednetwork"
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -508,7 +508,7 @@ def delete_network(name=None,
 			"delete_network needs either a valid guid or name"
 		)
 
-	url = "https://gacatalog.apps.rapyuta.io/routednetwork/%s" % guid
+	url = CATALOG_HOST + "/routednetwork/%s" % guid
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -537,7 +537,7 @@ def delete_network(name=None,
 #
 # -----------------------------------------------------------------------------
 def get_deployments(package_uid=None,
-                    phase=list(map(str, POSITIVE_PHASES)),
+                    phase=list([str(pp) for pp in POSITIVE_PHASES]),
                     project_id=None,
                     auth_token=None,):
 	"""
@@ -545,7 +545,7 @@ def get_deployments(package_uid=None,
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	url = "https://gacatalog.apps.rapyuta.io/deployment/list"
+	url = CATALOG_HOST + "/deployment/list"
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -556,7 +556,7 @@ def get_deployments(package_uid=None,
 		'phase': phase,
 	}
 
-	url = "https://gacatalog.apps.rapyuta.io/deployment/list?%s" % urlencode(params, doseq=True)
+	url = CATALOG_HOST + "/deployment/list?%s" % urlencode(params, doseq=True)
 
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
@@ -590,7 +590,7 @@ def get_deployment(name=None,
 		"project": project_id,
 		"Authorization": "Bearer " + auth_token,
 	}
-	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s" % id
+	url = CATALOG_HOST + "/serviceinstance/%s" % id
 
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
@@ -805,7 +805,7 @@ def delete_deployment(name=None,
 		"service_id": deployment['packageId'],
 		"plan_id": deployment['planId'],
 	}
-	url = "https://gacatalog.apps.rapyuta.io/v2/service_instances/%s" % deployment['deploymentId']
+	url = CATALOG_HOST + "/v2/service_instances/%s" % deployment['deploymentId']
 
 	return __utils__['http.query'](url=url,
 	                               header_dict=header_dict,
@@ -826,7 +826,7 @@ def get_dependencies(deployment_id,
 		"project": project_id,
 		"Authorization": "Bearer " + auth_token,
 	}
-	url = "https://gacatalog.apps.rapyuta.io/serviceinstance/%s/dependencies" % deployment_id
+	url = CATALOG_HOST + "/serviceinstance/%s/dependencies" % deployment_id
 
 	return __utils__['http.query'](url=url,
 	                               header_dict=header_dict,
