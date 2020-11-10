@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 CORE_API_HOST = "https://gaapiserver.apps.rapyuta.io"
 CATALOG_HOST = "https://gacatalog.apps.rapyuta.io"
-PROVISION_API_PATH = '/v2/service_instances'
+PROVISION_API_PATH = CATALOG_HOST + "/v2/service_instances"
 DEVICE_API_BASE_PATH = "/api/device-manager/v0/"
 DEVICE_API_PATH = DEVICE_API_BASE_PATH + "devices/"
 DEVICE_COMMAND_API_PATH = DEVICE_API_BASE_PATH + 'cmd/'
@@ -739,7 +739,7 @@ def create_deployment(name,
 	#
 	# Provision
 	#
-	url = CATALOG_HOST + PROVISION_API_PATH + "/instanceId"
+	url = PROVISION_API_PATH + "/instanceId"
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
