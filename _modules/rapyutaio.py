@@ -5,6 +5,8 @@ from enum import Enum
 from time import sleep
 
 from salt.exceptions import CommandExecutionError, SaltInvocationError
+import salt.utils.http
+import salt.utils.json
 
 
 
@@ -885,17 +887,17 @@ def get_devices(tgt=None,
 		"project": project_id,
 		"Authorization": "Bearer " + auth_token,
 	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="GET",
-	                                   status=True)
+	response = salt.utils.http.query(url=url,
+	                                 header_dict=header_dict,
+	                                 method="GET",
+	                                 status=True)
 	if 'error' in response:
 		raise CommandExecutionError(
 			response['error']
 		)
 
 	# parse the response
-	response_body = __utils__['json.loads'](response['body'])
+	response_body = salt.utils.json.loads(response['body'])
 
 	# filter the list of devices
 	if tgt is not None:
@@ -938,17 +940,17 @@ def get_device(name=None,
 		"project": project_id,
 		"Authorization": "Bearer " + auth_token,
 	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="GET",
-	                                   status=True)
+	response = salt.utils.http.query(url=url,
+	                                 header_dict=header_dict,
+	                                 method="GET",
+	                                 status=True)
 	if 'error' in response:
 		raise CommandExecutionError(
 			response['error']
 		)
 
 	# parse the response
-	response_body = __utils__['json.loads'](response['body'])
+	response_body = salt.utils.json.loads(response['body'])
 
 	return response_body['response']['data']
 
@@ -959,8 +961,8 @@ def get_device(name=None,
 # Commands
 #
 # -----------------------------------------------------------------------------
-def cmd(cmd,
-        tgt,
+def cmd(tgt,
+        cmd,
         shell=None,
         env={},
         bg=False,
@@ -1162,7 +1164,7 @@ def get_topics(name=None,
 			)
 
 		device = get_device(name=name,
-		                    evice_id=device_id,
+		                    device_id=device_id,
 		                    project_id=project_id,
 		                    auth_token=auth_token)
 
@@ -1185,3 +1187,32 @@ def get_topics(name=None,
 
 	response_body = __utils__['json.loads'](response['body'])
 	return response_body['response']['data']
+
+
+
+# -----------------------------------------------------------------------------
+#
+# Topics
+#
+# -----------------------------------------------------------------------------
+def get_labels(name=None,
+               device_id=None,
+               project_id=None,
+               auth_token=None):
+	"""
+	Returns a list of topics
+	"""
+	(project_id, auth_token) = _get_config(project_id, auth_token)
+
+	if device_id is None:
+		if name is None:
+			raise SaltInvocationError(
+				"get_device requires device_id or name"
+			)
+
+	device = get_device(name=name,
+	                    device_id=device_id,
+	                    project_id=project_id,
+	                    auth_token=auth_token)
+
+	return {label['key']: label['value'] for label in device['labels']}

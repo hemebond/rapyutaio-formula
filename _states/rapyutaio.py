@@ -42,7 +42,8 @@ from __future__ import absolute_import, print_function, unicode_literals
 import os
 import logging
 
-from salt.exceptions import CommandExecutionError, SaltInvocationError
+from salt.exceptions import CommandExecutionError
+# from salt.exceptions import CommandExecutionError, SaltInvocationError
 
 log = logging.getLogger(__name__)
 
