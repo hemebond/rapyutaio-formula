@@ -971,6 +971,11 @@ def cmd(tgt,
         project_id=None,
         auth_token=None):
 	"""
+	Execute a command on one or more devices
+
+	CLI Example::
+
+		salt '*' rapyutaio.cmd \\* ls cwd=/etc/
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
