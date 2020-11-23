@@ -1265,7 +1265,6 @@ def set_label(tgt,
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
 	devices = get_devices(tgt, project_id=project_id, auth_token=auth_token)
-	log.debug(devices)
 
 	changes = {
 		"added": [],
@@ -1274,7 +1273,6 @@ def set_label(tgt,
 	}
 	for device in devices:
 		device_labels = {l['key']: l for l in device['labels']}
-		log.debug(device_labels)
 
 		try:
 			label = device_labels[name]
