@@ -9,19 +9,28 @@ import salt.utils.http
 import salt.utils.json
 
 
+#
+# View Documentation
+# salt-call --local sys.doc rapyutaio.*
+#
+
 
 log = logging.getLogger(__name__)
 
 
 
-CORE_API_HOST = "https://gaapiserver.apps.rapyuta.io"
 CATALOG_HOST = "https://gacatalog.apps.rapyuta.io"
 PROVISION_API_PATH = CATALOG_HOST + "/v2/service_instances"
-DEVICE_API_BASE_PATH = "/api/device-manager/v0/"
+
+CORE_API_HOST = "https://gaapiserver.apps.rapyuta.io"
+DEVICE_API_BASE_PATH = CORE_API_HOST + "/api/device-manager/v0/"
 DEVICE_API_PATH = DEVICE_API_BASE_PATH + "devices/"
 DEVICE_COMMAND_API_PATH = DEVICE_API_BASE_PATH + 'cmd/'
 DEVICE_METRIC_API_PATH = DEVICE_API_BASE_PATH + 'metrics/'
 DEVICE_TOPIC_API_PATH = DEVICE_API_BASE_PATH + 'topics/'
+DEVICE_LABEL_API_PATH = DEVICE_API_BASE_PATH + 'labels/'
+
+
 
 class phase(Enum):
 	def __str__(self):
@@ -630,35 +639,6 @@ def create_deployment(name,
 				"create_deployment requires package_uid, or package_name and package_version"
 			)
 
-	# {
-	# 	"accepts_incomplete": true,
-	# 	"api_version": "1.0.0",
-	# 	"context": {
-	# 		"dependentDeployments": [],
-	# 		"labels": [],
-	# 		"routedNetworks": [
-	# 			{
-	# 				"guid": "net-tuyuexxtupcrjmxjunjfrdrs"
-	# 			}
-	# 		],
-	# 		"name": "ROS PUBLISHER"
-	# 	},
-	# 	"instance_id": "instanceId",
-	# 	"organization_guid": "organizationGuid",
-	# 	"parameters": {
-	# 		"global": {},
-	# 		"iqqafabrjdmwmmnbpqkautfz": {
-	# 			"bridge_params": {
-	# 				"alias": "TALKER"
-	# 			},
-	# 			"component_id": "iqqafabrjdmwmmnbpqkautfz"
-	# 		}
-	# 	},
-	# 	"plan_id": "plan-uuqfdaiaezzxidcamnvpxaxx",
-	# 	"service_id": "pkg-vnejycpfzzlssisfsyaizxtq",
-	# 	"space_guid": "spaceGuid"
-	# }
-
 	#
 	# Create provision configuration
 	#
@@ -874,14 +854,14 @@ def get_manifest(guid,
 # Devices
 #
 # -----------------------------------------------------------------------------
-def get_devices(tgt=None,
+def get_devices(tgt="*",
                 project_id=None,
                 auth_token=None):
 	"""
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	url = CORE_API_HOST + DEVICE_API_PATH
+	url = DEVICE_API_PATH
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -900,15 +880,12 @@ def get_devices(tgt=None,
 	response_body = salt.utils.json.loads(response['body'])
 
 	# filter the list of devices
-	if tgt is not None:
-		devices = [
-			device
-			for device
-			in response_body['response']['data']
-			if __salt__['match.compound'](tgt, device['name'])
-		]
-	else:
-		devices = response_body['response']['data']
+	devices = [
+		device
+		for device
+		in response_body['response']['data']
+		if __utils__['rapyutaio.match'](tgt, device)
+	]
 
 	return devices
 
@@ -934,7 +911,7 @@ def get_device(name=None,
 
 		device_id = all_devices[0]['uuid']
 
-	url = CORE_API_HOST + DEVICE_API_PATH + device_id
+	url = DEVICE_API_PATH + device_id
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -989,12 +966,12 @@ def cmd(tgt,
 		device['uuid']: device['name']
 		for device
 		in all_devices
-		if __salt__['match.compound'](tgt, device['name'])
+		if __utils__['rapyutaio.match'](tgt, device)
 		and device['status'] == "ONLINE"
 	}
 
 	if device_names:
-		url = CORE_API_HOST + DEVICE_COMMAND_API_PATH
+		url = DEVICE_COMMAND_API_PATH
 		header_dict = {
 			"accept": "application/json",
 			"project": project_id,
@@ -1066,7 +1043,7 @@ def get_metrics(name=None,
 
 		device_id = device['uuid']
 
-	url = CORE_API_HOST + DEVICE_METRIC_API_PATH + device_id
+	url = DEVICE_METRIC_API_PATH + device_id
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -1121,7 +1098,7 @@ def add_metrics(name=None,
 				"qos should be one of low (0), medium (1), or high (2)"
 			)
 
-	url = CORE_API_HOST + DEVICE_METRIC_API_PATH + device_id
+	url = DEVICE_METRIC_API_PATH + device_id
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -1175,7 +1152,7 @@ def get_topics(name=None,
 
 		device_id = device['uuid']
 
-	url = CORE_API_HOST + DEVICE_METRIC_API_PATH + device_id
+	url = DEVICE_METRIC_API_PATH + device_id
 	header_dict = {
 		"accept": "application/json",
 		"project": project_id,
@@ -1197,27 +1174,127 @@ def get_topics(name=None,
 
 # -----------------------------------------------------------------------------
 #
-# Topics
+# Labels
 #
 # -----------------------------------------------------------------------------
-def get_labels(name=None,
-               device_id=None,
-               project_id=None,
-               auth_token=None):
+def _label_add(device_id, name, value, project_id, auth_token):
+	url = DEVICE_LABEL_API_PATH + device_id
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+		"Content-Type": "application/json",
+	}
+	data = {
+		name: value,
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="POST",
+	                                   data=__utils__['json.dumps'](data),
+	                                   status=True)
+
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	response_body = __utils__['json.loads'](response['body'])
+	return response_body['response']['data']
+
+
+
+def _label_update(label_id, name, value, project_id, auth_token):
+	url = DEVICE_LABEL_API_PATH + str(label_id)
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+		"Content-Type": "application/json",
+	}
+	data = {
+		"key": name,
+		"value": value,
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="PUT",
+	                                   data=__utils__['json.dumps'](data),
+	                                   status=True)
+
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	response_body = __utils__['json.loads'](response['body'])
+	return response_body['response']['data']
+
+
+
+def _label_delete(label_id, project_id, auth_token):
+	url = DEVICE_LABEL_API_PATH + str(label_id)
+	header_dict = {
+		"accept": "application/json",
+		"project": project_id,
+		"Authorization": "Bearer " + auth_token,
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="DELETE",
+	                                   status=True)
+
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	response_body = __utils__['json.loads'](response['body'])
+	return response_body['response']['data']
+
+
+
+def set_label(tgt,
+              name,
+              value,
+              project_id=None,
+              auth_token=None):
 	"""
-	Returns a list of topics
+	Set a label on one or more devices
 	"""
 	(project_id, auth_token) = _get_config(project_id, auth_token)
 
-	if device_id is None:
-		if name is None:
-			raise SaltInvocationError(
-				"get_device requires device_id or name"
-			)
+	devices = get_devices(tgt, project_id=project_id, auth_token=auth_token)
+	log.debug(devices)
 
-	device = get_device(name=name,
-	                    device_id=device_id,
-	                    project_id=project_id,
-	                    auth_token=auth_token)
+	changes = {
+		"added": [],
+		"deleted": [],
+		"updated": [],
+	}
+	for device in devices:
+		device_labels = {l['key']: l for l in device['labels']}
+		log.debug(device_labels)
 
-	return {label['key']: label['value'] for label in device['labels']}
+		try:
+			label = device_labels[name]
+		except KeyError:
+			if value != "":
+				# add label
+				_label_add(device['uuid'], name, value, project_id, auth_token)
+				changes['added'].append(device['name'])
+		else:
+			if value == "":
+				# delete label
+				_label_delete(label['id'], project_id, auth_token)
+				changes['deleted'].append(device['name'])
+			else:
+				# update label
+				_label_update(label['id'], name, value, project_id, auth_token)
+				changes['updated'].append(device['name'])
+
+	return {
+		"label": name,
+		"value": value,
+		"changes": changes,
+	}

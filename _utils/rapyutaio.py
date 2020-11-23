@@ -1,4 +1,5 @@
 import salt.config
+from salt.matchers.compound_match import match as salt_compound_match
 
 
 __salt__ = None
@@ -46,3 +47,27 @@ def get_config(project_id, auth_token):
 		auth_token = __salt__['config.option']("rapyutaio.auth_token")
 
 	return (project_id, auth_token)
+
+
+
+def match(tgt, device):
+	"""
+	Matches devices against a compound target string using the
+	device name as the id and device labels as the grains
+	"""
+	opts = __opts__
+
+	opts.update({
+		"id": device['name'],
+		"grains": {
+			"labels": {
+				label['key']: label['value'] for label in device['labels']
+			},
+			"config_variables": {
+				var['key']: var['value'] for var in device['config_variables']
+			},
+			"status": device['status']
+		}
+	})
+
+	return salt_compound_match(tgt, opts)
