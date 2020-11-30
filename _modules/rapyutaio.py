@@ -1296,3 +1296,15 @@ def set_label(tgt,
 		"value": value,
 		"changes": changes,
 	}
+
+
+
+def test(project_id=None, auth_token=None):
+	"""
+	Just for testing
+	"""
+	return __utils__['rapyutaio.api_request'](url=DEVICE_API_PATH,
+	                                          method="GET",
+	                                          project_id=project_id,
+	                                          auth_token=auth_token)
+
