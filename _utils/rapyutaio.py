@@ -162,6 +162,11 @@ def _send_request(url, header_dict={}, method="GET", data=None):
 	"""
 	Sends an HTTP request, parses the result, raises an exception on error
 	"""
+	log.debug("url: %s" % url)
+	log.debug("header_dict: %s" % header_dict)
+	log.debug("method: %s" % method)
+	log.debug("data: %s" % data)
+
 	response = salt.utils.http.query(url=url,
 	                                 header_dict=header_dict,
 	                                 method=method,

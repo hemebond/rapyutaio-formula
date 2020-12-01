@@ -859,31 +859,17 @@ def get_devices(tgt="*",
                 auth_token=None):
 	"""
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	url = DEVICE_API_PATH
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
-	response = salt.utils.http.query(url=url,
-	                                 header_dict=header_dict,
-	                                 method="GET",
-	                                 status=True)
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
-
-	# parse the response
-	response_body = salt.utils.json.loads(response['body'])
+	response = __utils__['rapyutaio.api_request'](url=url,
+	                                              method="GET",
+	                                              project_id=project_id,
+	                                              auth_token=auth_token)
 
 	# filter the list of devices
 	devices = [
 		device
 		for device
-		in response_body['response']['data']
+		in response['response']['data']
 		if __utils__['rapyutaio.match'](tgt, device)
 	]
 
@@ -1178,92 +1164,52 @@ def get_topics(name=None,
 #
 # -----------------------------------------------------------------------------
 def _label_add(device_id, name, value, project_id, auth_token):
-	url = DEVICE_LABEL_API_PATH + device_id
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-		"Content-Type": "application/json",
-	}
+	url = DEVICE_LABEL_API_PATH + str(device_id)
 	data = {
 		name: value,
 	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="POST",
-	                                   data=__utils__['json.dumps'](data),
-	                                   status=True)
-
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
-
-	response_body = __utils__['json.loads'](response['body'])
-	return response_body['response']['data']
+	response = __utils__['rapyutaio.api_request'](url=url,
+	                                              method="POST",
+	                                              data=data,
+	                                              project_id=project_id,
+	                                              auth_token=auth_token)
+	return response['response']['data']
 
 
 
 def _label_update(label_id, name, value, project_id, auth_token):
 	url = DEVICE_LABEL_API_PATH + str(label_id)
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-		"Content-Type": "application/json",
-	}
 	data = {
 		"key": name,
 		"value": value,
 	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="PUT",
-	                                   data=__utils__['json.dumps'](data),
-	                                   status=True)
-
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
-
-	response_body = __utils__['json.loads'](response['body'])
-	return response_body['response']['data']
+	response = __utils__['rapyutaio.api_request'](url=url,
+	                                              method="PUT",
+	                                              data=data,
+	                                              project_id=project_id,
+	                                              auth_token=auth_token)
+	return response['response']['data']
 
 
 
 def _label_delete(label_id, project_id, auth_token):
 	url = DEVICE_LABEL_API_PATH + str(label_id)
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="DELETE",
-	                                   status=True)
-
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
-
-	response_body = __utils__['json.loads'](response['body'])
-	return response_body['response']['data']
+	response = __utils__['rapyutaio.api_request'](url=url,
+	                                              method="DELETE",
+	                                              project_id=project_id,
+	                                              auth_token=auth_token)
+	return response['response']['data']
 
 
 
-def set_label(tgt,
-              name,
-              value,
-              project_id=None,
-              auth_token=None):
+def label(tgt,
+          name,
+          value,
+          project_id=None,
+          auth_token=None):
 	"""
 	Set a label on one or more devices
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	devices = get_devices(tgt, project_id=project_id, auth_token=auth_token)
 
 	changes = {
@@ -1273,6 +1219,7 @@ def set_label(tgt,
 	}
 	for device in devices:
 		device_labels = {l['key']: l for l in device['labels']}
+		log.debug(device_labels)
 
 		try:
 			label = device_labels[name]
@@ -1286,7 +1233,7 @@ def set_label(tgt,
 				# delete label
 				_label_delete(label['id'], project_id, auth_token)
 				changes['deleted'].append(device['name'])
-			else:
+			elif value != device_labels[name]['value']:
 				# update label
 				_label_update(label['id'], name, value, project_id, auth_token)
 				changes['updated'].append(device['name'])
