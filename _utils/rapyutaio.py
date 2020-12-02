@@ -158,7 +158,7 @@ def _header_dict(project_id, auth_token):
 
 
 
-def _send_request(url, header_dict={}, method="GET", data=None):
+def _send_request(url, header_dict={}, method="GET", data=None, params=None):
 	"""
 	Sends an HTTP request, parses the result, raises an exception on error
 	"""
@@ -166,11 +166,13 @@ def _send_request(url, header_dict={}, method="GET", data=None):
 	log.debug("header_dict: %s" % header_dict)
 	log.debug("method: %s" % method)
 	log.debug("data: %s" % data)
+	log.debug("params: %s" % params)
 
 	response = salt.utils.http.query(url=url,
 	                                 header_dict=header_dict,
 	                                 method=method,
 	                                 data=salt.utils.json.dumps(data) if data is not None else None,
+	                                 params=params,
 	                                 status=True)
 	log.debug(response)
 
@@ -189,7 +191,7 @@ def _send_request(url, header_dict={}, method="GET", data=None):
 
 
 
-def api_request(url, header_dict={}, method="GET", data=None, project_id=None, auth_token=None):
+def api_request(url, header_dict={}, method="GET", data=None, params=None, project_id=None, auth_token=None):
 	"""
 	Wrapper for HTTP requests to IO and handle authentication and tokens
 	"""
@@ -214,7 +216,8 @@ def api_request(url, header_dict={}, method="GET", data=None, project_id=None, a
 		return _send_request(url=url,
 		                     header_dict=header_dict,
 		                     method=method,
-		                     data=data)
+		                     data=data,
+		                     params=params)
 	except CommandExecutionError as e:
 		if e.info['status'] == 401:
 			# HTTP 401: Unauthorized
@@ -226,6 +229,7 @@ def api_request(url, header_dict={}, method="GET", data=None, project_id=None, a
 				return _send_request(url=url,
 				                     header_dict=header_dict,
 				                     method=method,
-				                     data=data)
+				                     data=data,
+				                     params=params)
 
 		raise e
