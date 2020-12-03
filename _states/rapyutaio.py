@@ -397,8 +397,10 @@ def deployment_present(name,
 		"changes": {},
 	}
 
+	log.info(f"deployment_present: {name}")
 	existing_deployment = __salt__['rapyutaio.get_deployment'](name=name)
 
+	log.info(f"existing_deployment: {existing_deployment}")
 	if existing_deployment is not None:
 		pkg_id = existing_deployment['packageId']
 		existing_dpl_pkg = __salt__['rapyutaio.get_package'](name=package_name,
@@ -411,8 +413,9 @@ def deployment_present(name,
 
 		log.fatal(existing_deployment)
 		# for component in existing_deployment
-
-		# ret['changes'] = __utils__['data.recursive_diff'](existing_deployment, new_manifest)
+		ret['comment'] = f"Deployment {name} already provisioned from {pkg_id}"
+		ret['result'] = False
+		return ret
 
 	#
 	# TODO: check the properties of the deployment

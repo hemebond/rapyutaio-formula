@@ -235,8 +235,6 @@ def delete_package(name=None,
 		False: file not there
 		Exception: could not delete
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	if guid is None:
 		if name is None or version is None:
 			raise SaltInvocationError(
@@ -284,8 +282,6 @@ def create_package(source=None,
 	"""
 	Upload a package manifest
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	if manifest is None:
 		if source is None:
 			raise SaltInvocationError(
@@ -335,7 +331,6 @@ def get_networks(project_id=None,
 	Get a list of all routed networks
 	"""
 	url = CATALOG_HOST + "/routednetwork"
-
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
 		                                                   method="GET",
@@ -404,33 +399,22 @@ def create_network(name,
 	"""
 	Create a new Routed Network
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	url = CATALOG_HOST + "/routednetwork"
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
 	data = {
 		"name": name,
 		"rosDistro": ros_distro,
 		"runtime": runtime,
 		"parameters": parameters or {},
 	}
-
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="POST",
-	                                   data=__utils__['json.dumps'](data),
-	                                   status=True)
-
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
-
-	return __utils__['json.loads'](response['body'])
+	try:
+		return __utils__['rapyutaio.api_request'](url=url,
+		                                          method="POST",
+		                                          data=data,
+		                                          project_id=project_id,
+		                                          auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return None
 
 
 
@@ -440,8 +424,6 @@ def delete_network(name=None,
                    auth_token=None):
 	"""
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	if name is not None:
 		networks = get_networks(project_id=project_id,
 		                        auth_token=auth_token)
@@ -457,25 +439,16 @@ def delete_network(name=None,
 		)
 
 	url = CATALOG_HOST + "/routednetwork/%s" % guid
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="DELETE",
-	                                   status=True)
-	log.debug(response)
+	try:
+		__utils__['rapyutaio.api_request'](url=url,
+		                                   method="DELETE",
+		                                   project_id=project_id,
+		                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return False
 
-	if response['status'] == 200:
-		return True
-
-	if 'error' in response:
-		if response['status'] != 404:
-			raise CommandExecutionError(response['error'])
-
-	return False
+	return True
 
 
 
@@ -491,30 +464,20 @@ def get_deployments(package_uid=None,
 	"""
 	salt-call --log-level=debug --local rapyutaio.list_deployments phase=["In progress","Succeeded"]
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
-	url = CATALOG_HOST + "/deployment/list"
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
 	params = {
 		'package_uid': package_uid or '',
 		'phase': phase,
 	}
-
 	url = CATALOG_HOST + "/deployment/list?%s" % urlencode(params, doseq=True)
+	try:
+		return __utils__['rapyutaio.api_request'](url=url,
+		                                          method="GET",
+		                                          project_id=project_id,
+		                                          auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return None
 
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="GET",
-	                                   status=True)
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
-	return __utils__['json.loads'](response['body'])
 
 
 def get_deployment(name=None,
@@ -523,8 +486,6 @@ def get_deployment(name=None,
                    auth_token=None):
 	"""
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	if name is not None:
 		deployments = get_deployments(project_id=project_id,
 		                              auth_token=auth_token)
@@ -533,27 +494,18 @@ def get_deployment(name=None,
 			if deployment['name'] == name:
 				id = deployment['deploymentId']
 
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
+	if id is None:
+		return None
+
 	url = CATALOG_HOST + "/serviceinstance/%s" % id
-
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="GET",
-	                                   status=True)
-
-	if 'error' in response:
-		if response['status'] == 404:
-			return None
-
-		raise CommandExecutionError(
-			response['error']
-		)
-
-	return __utils__['json.loads'](response['body'])
+	try:
+		return __utils__['rapyutaio.api_request'](url=url,
+		                                          method="GET",
+		                                          project_id=project_id,
+		                                          auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return None
 
 
 
@@ -568,8 +520,6 @@ def create_deployment(name,
                       auth_token=None):
 	"""
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	if package_uid is None:
 		if package_name is None or package_version is None:
 			raise SaltInvocationError(
@@ -659,22 +609,15 @@ def create_deployment(name,
 	# Provision
 	#
 	url = PROVISION_API_PATH + "/instanceId"
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-		"Content-Type": "application/json",
-	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="PUT",
-	                                   data=__utils__['json.dumps'](provision_configuration),
-	                                   status=True)
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
-	response_body = __utils__['json.loads'](response['body'])
+	try:
+		response_body = __utils__['rapyutaio.api_request'](url=url,
+		                                                   method="PUT",
+		                                                   data=provision_configuration,
+		                                                   project_id=project_id,
+		                                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return False
 
 	#
 	# Wait for the deployment to complete
@@ -705,31 +648,30 @@ def delete_deployment(name=None,
 
 		{"async":false,"component_status":null}
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	deployment = get_deployment(name=name,
 	                            id=id,
 	                            project_id=None,
 	                            auth_token=None)
 
 	if deployment is None:
-		return "Deployment {} does not exist".format(name)
+		log.info(f"Deployment {name} does not exist")
+		return True
 
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
 	params = {
 		"service_id": deployment['packageId'],
 		"plan_id": deployment['planId'],
 	}
 	url = CATALOG_HOST + "/v2/service_instances/%s" % deployment['deploymentId']
-
-	return __utils__['http.query'](url=url,
-	                               header_dict=header_dict,
-	                               method="DELETE",
-	                               params=params)
+	try:
+		__utils__['rapyutaio.api_request'](url=url,
+		                                   method="DELETE",
+		                                   params=params,
+		                                   project_id=project_id,
+		                                   auth_token=auth_token)
+		return True
+	except CommandExecutionError as e:
+		log.exception(e)
+		return False
 
 
 
@@ -738,18 +680,15 @@ def get_dependencies(deployment_id,
                      auth_token=None):
 	"""
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
 	url = CATALOG_HOST + "/serviceinstance/%s/dependencies" % deployment_id
-
-	return __utils__['http.query'](url=url,
-	                               header_dict=header_dict,
-	                               method="GET")
+	try:
+		return __utils__['rapyutaio.api_request'](url=url,
+		                                          method="GET",
+		                                          project_id=project_id,
+		                                          auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return None
 
 
 
@@ -764,14 +703,23 @@ def get_manifest(guid,
 	                      auth_token=auth_token)
 
 	if not package:
-		return False
+		return None
 
 	url = package['packageUrl']
-	response_body = __utils__['rapyutaio.api_request'](url=url,
-	                                                   method="GET",
-	                                                   project_id=project_id,
-	                                                   auth_token=auth_token)
-	return response_body
+	header_dict = {
+		"accept": "application/json"
+	}
+	response = __utils__['http.query'](url=url,
+	                                   header_dict=header_dict,
+	                                   method="GET",
+	                                   status=True)
+
+	if 'error' in response:
+		raise CommandExecutionError(
+			response['error']
+		)
+
+	return __utils__['json.loads'](response['body'])
 
 
 
@@ -786,10 +734,14 @@ def get_devices(tgt="*",
 	"""
 	"""
 	url = DEVICE_API_PATH
-	response_body = __utils__['rapyutaio.api_request'](url=url,
-	                                                   method="GET",
-	                                                   project_id=project_id,
-	                                                   auth_token=auth_token)
+	try:
+		response_body = __utils__['rapyutaio.api_request'](url=url,
+		                                                   method="GET",
+		                                                   project_id=project_id,
+		                                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return None
 
 	# filter the list of devices
 	devices = [
@@ -809,8 +761,6 @@ def get_device(name=None,
                auth_token=None):
 	"""
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	if device_id is None:
 		if name is None:
 			raise SaltInvocationError(
@@ -821,13 +771,21 @@ def get_device(name=None,
 		                          project_id=project_id,
 		                          auth_token=auth_token)
 
+		if all_devices in ([], None):
+			return None
+
 		device_id = all_devices[0]['uuid']
 
 	url = DEVICE_API_PATH + device_id
-	response_body = __utils__['rapyutaio.api_request'](url=url,
-	                                                   method="GET",
-	                                                   project_id=project_id,
-	                                                   auth_token=auth_token)
+	try:
+		response_body = __utils__['rapyutaio.api_request'](url=url,
+		                                                   method="GET",
+		                                                   project_id=project_id,
+		                                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return None
+
 	return response_body['response']['data']
 
 
@@ -853,7 +811,6 @@ def cmd(tgt,
 
 		salt '*' rapyutaio.cmd \\* ls cwd=/etc/
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
 
 	#
 	# Get devices
@@ -870,15 +827,6 @@ def cmd(tgt,
 	}
 
 	if device_names:
-		url = DEVICE_COMMAND_API_PATH
-		header_dict = {
-			"accept": "application/json",
-			"project": project_id,
-			"Authorization": "Bearer " + auth_token,
-			"Content-Type": "application/json",
-		}
-		log.debug(header_dict)
-
 		# Copy only the set function args into the command dict
 		command = {
 			key: val
@@ -893,18 +841,18 @@ def cmd(tgt,
 			    'cwd']
 			and val
 		}
-		command.update({"device_ids": list(device_names.keys())})
+		command['device_ids'] = list(device_names.keys())
 
-		response = __utils__['http.query'](url=url,
-		                                   header_dict=header_dict,
-		                                   method="POST",
-		                                   data=__utils__['json.dumps'](command),
-		                                   status=True)
-		if 'error' in response:
-			raise CommandExecutionError(
-				response['error']
-			)
-		response_body = __utils__['json.loads'](response['body'])
+		url = DEVICE_COMMAND_API_PATH
+		try:
+			response_body = __utils__['rapyutaio.api_request'](url=url,
+			                                                   method="POST",
+			                                                   data=command,
+			                                                   project_id=project_id,
+			                                                   auth_token=auth_token)
+		except CommandExecutionError as e:
+			log.exception(e)
+			return False
 
 		# Response uses device UUID as key, change to device name
 		return {
@@ -927,8 +875,6 @@ def get_metrics(name=None,
                 auth_token=None):
 	"""
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	if device_id is None:
 		if name is None:
 			raise SaltInvocationError(
@@ -943,21 +889,15 @@ def get_metrics(name=None,
 		device_id = device['uuid']
 
 	url = DEVICE_METRIC_API_PATH + device_id
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="GET",
-	                                   status=True)
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
+	try:
+		response_body = __utils__['rapyutaio.api_request'](url=url,
+		                                                   method="GET",
+		                                                   project_id=project_id,
+		                                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return None
 
-	response_body = __utils__['json.loads'](response['body'])
 	return response_body['response']['data']
 
 
@@ -970,8 +910,6 @@ def add_metrics(name=None,
                 auth_token=None):
 	"""
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	if device_id is None:
 		if name is None:
 			raise SaltInvocationError(
@@ -998,27 +936,21 @@ def add_metrics(name=None,
 			)
 
 	url = DEVICE_METRIC_API_PATH + device_id
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-		"Content-Type": "application/json",
-	}
 	data = {
 		"name": metric_name,
 		"config": {
 			"qos": qos,
 		}
 	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="POST",
-	                                   data=__utils__['json.dumps'](data),
-	                                   status=True)
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
+	try:
+		__utils__['rapyutaio.api_request'](url=url,
+		                                   method="POST",
+		                                   data=data,
+		                                   project_id=project_id,
+		                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return False
 
 	return True
 
@@ -1036,8 +968,6 @@ def get_topics(name=None,
 	"""
 	Returns a list of topics
 	"""
-	(project_id, auth_token) = _get_config(project_id, auth_token)
-
 	if device_id is None:
 		if name is None:
 			raise SaltInvocationError(
@@ -1052,21 +982,15 @@ def get_topics(name=None,
 		device_id = device['uuid']
 
 	url = DEVICE_METRIC_API_PATH + device_id
-	header_dict = {
-		"accept": "application/json",
-		"project": project_id,
-		"Authorization": "Bearer " + auth_token,
-	}
-	response = __utils__['http.query'](url=url,
-	                                   header_dict=header_dict,
-	                                   method="GET",
-	                                   status=True)
-	if 'error' in response:
-		raise CommandExecutionError(
-			response['error']
-		)
+	try:
+		response_body = __utils__['rapyutaio.api_request'](url=url,
+		                                                   method="GET",
+		                                                   project_id=project_id,
+		                                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return None
 
-	response_body = __utils__['json.loads'](response['body'])
 	return response_body['response']['data']
 
 
@@ -1081,11 +1005,16 @@ def _label_add(device_id, name, value, project_id, auth_token):
 	data = {
 		name: value,
 	}
-	response_body = __utils__['rapyutaio.api_request'](url=url,
-	                                                   method="POST",
-	                                                   data=data,
-	                                                   project_id=project_id,
-	                                                   auth_token=auth_token)
+	try:
+		response_body = __utils__['rapyutaio.api_request'](url=url,
+		                                                   method="POST",
+		                                                   data=data,
+		                                                   project_id=project_id,
+		                                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return False
+
 	return response_body['response']['data']
 
 
@@ -1096,21 +1025,31 @@ def _label_update(label_id, name, value, project_id, auth_token):
 		"key": name,
 		"value": value,
 	}
-	response_body = __utils__['rapyutaio.api_request'](url=url,
-	                                                   method="PUT",
-	                                                   data=data,
-	                                                   project_id=project_id,
-	                                                   auth_token=auth_token)
+	try:
+		response_body = __utils__['rapyutaio.api_request'](url=url,
+		                                                   method="PUT",
+		                                                   data=data,
+		                                                   project_id=project_id,
+		                                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return False
+
 	return response_body['response']['data']
 
 
 
 def _label_delete(label_id, project_id, auth_token):
 	url = DEVICE_LABEL_API_PATH + str(label_id)
-	response_body = __utils__['rapyutaio.api_request'](url=url,
-	                                                   method="DELETE",
-	                                                   project_id=project_id,
-	                                                   auth_token=auth_token)
+	try:
+		response_body = __utils__['rapyutaio.api_request'](url=url,
+		                                                   method="DELETE",
+		                                                   project_id=project_id,
+		                                                   auth_token=auth_token)
+	except CommandExecutionError as e:
+		log.exception(e)
+		return False
+
 	return response_body['response']['data']
 
 

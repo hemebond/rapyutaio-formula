@@ -153,7 +153,6 @@ def _header_dict(project_id, auth_token):
 		"accept": "application/json",
 		"project": str(project_id),
 		"Authorization": "Bearer " + str(auth_token),
-		"Content-Type": "application/json",
 	}
 
 
@@ -167,6 +166,9 @@ def _send_request(url, header_dict={}, method="GET", data=None, params=None):
 	log.debug("method: %s" % method)
 	log.debug("data: %s" % data)
 	log.debug("params: %s" % params)
+
+	if data is not None:
+		header_dict['Content-Type'] = "application/json"
 
 	response = salt.utils.http.query(url=url,
 	                                 header_dict=header_dict,
@@ -231,5 +233,4 @@ def api_request(url, header_dict={}, method="GET", data=None, params=None, proje
 				                     method=method,
 				                     data=data,
 				                     params=params)
-
 		raise e
