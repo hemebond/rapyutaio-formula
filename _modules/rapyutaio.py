@@ -32,7 +32,7 @@ DEVICE_LABEL_API_PATH = DEVICE_API_BASE_PATH + 'labels/'
 
 
 
-class phase(Enum):
+class Phase(Enum):
 	def __str__(self):
 		return str(self.value)
 
@@ -44,12 +44,12 @@ class phase(Enum):
 	STOPPED = 'Deployment stopped'
 
 POSITIVE_PHASES = [
-	phase.INPROGRESS,
-	phase.PROVISIONING,
-	phase.SUCCEEDED,
+	Phase.INPROGRESS,
+	Phase.PROVISIONING,
+	Phase.SUCCEEDED,
 ]
 
-class status(Enum):
+class Status(Enum):
 	def __str__(self):
 		return str(self.value)
 
@@ -67,9 +67,9 @@ def __virtual__():
 
 
 def _error(ret, err_msg):
-    ret['result'] = False
-    ret['comment'] = err_msg
-    return ret
+	ret['result'] = False
+	ret['comment'] = err_msg
+	return ret
 
 
 
@@ -84,7 +84,7 @@ def _get_config(project_id, auth_token):
 	if not auth_token and __salt__["config.option"]("rapyutaio.auth_token"):
 		auth_token = __salt__["config.option"]("rapyutaio.auth_token")
 
-	return (project_id, auth_token)
+	return project_id, auth_token
 
 
 
@@ -93,7 +93,7 @@ def _get_config(project_id, auth_token):
 # Packages
 #
 # -----------------------------------------------------------------------------
-def get_packages(phase=[],
+def get_packages(phase=(),
                  project_id=None,
                  auth_token=None):
 	"""
@@ -623,14 +623,14 @@ def create_deployment(name,
 	# Wait for the deployment to complete
 	#
 	deployment_id = response_body['operation']
-	deployment_phase = str(phase.INPROGRESS)
-	while deployment_phase in list(map(str, [phase.INPROGRESS, phase.PROVISIONING])):
+	deployment_phase = str(Phase.INPROGRESS)
+	while deployment_phase in list(map(str, [Phase.INPROGRESS, Phase.PROVISIONING])):
 		sleep(10)
 
 		deployment = get_deployment(id=deployment_id)
 		deployment_phase = deployment['phase']
 
-	if deployment_phase == str(phase.SUCCEEDED):
+	if deployment_phase == str(Phase.SUCCEEDED):
 		return deployment
 
 	return False

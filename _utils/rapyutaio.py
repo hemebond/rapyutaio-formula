@@ -3,7 +3,7 @@ import salt.utils.sdb
 from datetime import datetime
 import logging
 from salt.matchers.compound_match import match as salt_compound_match
-from salt.exceptions import CommandExecutionError, SaltInvocationError
+from salt.exceptions import CommandExecutionError, InvalidConfigError
 
 
 
@@ -51,18 +51,18 @@ def get_config(project_id, auth_token):
 	If there is no project_id or auth token provided, this
 	will attempt to fetch it from the Salt configuration
 	"""
-	if not project_id and __salt__['config.option']("rapyutaio.project_id"):
-		project_id = __salt__['config.option']("rapyutaio.project_id")
+	if not project_id and __salt__['config.get']("rapyutaio:project_id"):
+		project_id = __salt__['config.get']("rapyutaio:project_id")
 
-	if not auth_token and __salt__['config.option']("rapyutaio.auth_token"):
-		auth_token = __salt__['config.option']("rapyutaio.auth_token")
+	if not auth_token and __salt__['config.get']("rapyutaio:auth_token"):
+		auth_token = __salt__['config.get']("rapyutaio:auth_token")
 
 	return (project_id, auth_token)
 
 
 
 def get_credentials():
-	config = __salt__['config.option']('rapyutaio')
+	config = __salt__['config.get']('rapyutaio')
 	return (config['username'], config['password'])
 
 
@@ -186,30 +186,49 @@ def _send_request(url, header_dict={}, method="GET", data=None, params=None):
 			}
 		)
 
-	response_body = salt.utils.json.loads(response['body'])
-	log.debug(response_body)
+	if response['body'] != '':
+		return salt.utils.json.loads(response['body'])
+	else:
+		return {}
 
-	return response_body
 
 
-
-def api_request(url, header_dict={}, method="GET", data=None, params=None, project_id=None, auth_token=None):
+def api_request(url,
+                method="GET",
+                header_dict={},
+                data=None,
+                params=None,
+                project_id=None,
+                auth_token=None):
 	"""
 	Wrapper for HTTP requests to IO and handle authentication and tokens
 	"""
-	project_id = project_id or __salt__['config.option']("rapyutaio.project_id")
+	project_id = project_id or __salt__['config.get']("rapyutaio:project_id")
+
+	if not project_id:
+		raise InvalidConfigError("No rapyutaio project_id found")
+
+	generated_auth_token = None
 
 	if auth_token is None:
 		# Get the cached token with its expiryAt
 		cached_token = salt.utils.sdb.sdb_get('sdb://rapyutaio/auth_token', __opts__, None)
 
-		# Trim off the nanoseconds when parsing the datetime
-		expiry = datetime.strptime(cached_token['expiryAt'][:19], '%Y-%m-%dT%H:%M:%S')
-		if expiry < datetime.utcnow():
-			# cached token has expired
-			generated_auth_token = _renew_token()['token']
-		else:
-			generated_auth_token = cached_token['token']
+		log.debug("cached_token: {}".format(str(cached_token)))
+
+		if cached_token:
+			try:
+				# Trim off the nanoseconds when parsing the datetime
+				expiry = datetime.strptime(cached_token['expiryAt'][:19], '%Y-%m-%dT%H:%M:%S')
+
+				if expiry >= datetime.utcnow():
+					generated_auth_token = cached_token['token']
+			except KeyError:
+				pass
+
+	if auth_token is None and generated_auth_token is None:
+		# cached token has expired
+		generated_auth_token = _renew_token()['token']
 
 	header_dict = _header_dict(project_id, auth_token or generated_auth_token)
 
