@@ -67,8 +67,12 @@ def __virtual__():
 # -----------------------------------------------------------------------------
 def package_present(name,
                     source=None,
-                    manifest=None,
-                    show_changes=True):
+                    template=None,
+                    context=None,
+                    defaults=None,
+                    contents=None,
+                    show_changes=True,
+                    saltenv="base"):
 	"""
 	"""
 	ret = {
@@ -81,29 +85,29 @@ def package_present(name,
 	#
 	# Get the content of the new manifest
 	#
-	if manifest is None:
+	if contents is None:
 		if source is None:
-			ret['comment'] = "package_present requires either 'source' or 'manifest'"
+			ret['comment'] = "package_present requires either 'source' or 'contents'"
 			return ret
 
-		file_name = __salt__["cp.cache_file"](source)
+		contents = __salt__['cp.get_file_str'](source, saltenv=saltenv)
 
-		if file_name is not False:
-			with __utils__['files.fopen'](file_name, "r") as _f:
-				file_name_part, file_extension = os.path.splitext(file_name)
+		if template is not None:
+			contents = __salt__["file.apply_template_on_contents"](
+				contents, template, context, defaults, saltenv
+			)
+			log.debug(contents)
 
-				if file_extension == '.json':
-					new_manifest = __utils__['json.load'](_f)
-				elif file_extension in ['.yaml', '.yml']:
-					new_manifest = __utils__['yaml.load'](_f)
-				else:
-					ret['comment'] = "Manifest source must be a JSON (.json) or YAML (.yaml, .yml) file"
-					return ret
-		else:
-			ret['comment'] = "Source file '{}' missing".format(source)
-			return ret
+		try:
+			new_manifest = __utils__['yaml.load'](contents)
+		except Exception:
+			try:
+				new_manifest = __utils__['json.loads'](contents)
+			except Exception:
+				ret['comment'] = "Manifest source must be a JSON or YAML file"
+				return ret
 	else:
-		new_manifest = manifest
+		new_manifest = contents
 
 	#
 	# Allow setting the name via the state
