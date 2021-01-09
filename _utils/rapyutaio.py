@@ -194,7 +194,7 @@ def _send_request(url, header_dict={}, method="GET", data=None, params=None):
 
 
 def api_request(url,
-                method="GET",
+                http_method="GET",
                 header_dict={},
                 data=None,
                 params=None,
@@ -203,6 +203,7 @@ def api_request(url,
 	"""
 	Wrapper for HTTP requests to IO and handle authentication and tokens
 	"""
+	log.debug("rapyutaio.api_request() called...")
 	project_id = project_id or __salt__['config.get']("rapyutaio:project_id")
 
 	if not project_id:
@@ -236,7 +237,7 @@ def api_request(url,
 	try:
 		return _send_request(url=url,
 		                     header_dict=header_dict,
-		                     method=method,
+		                     method=http_method,
 		                     data=data,
 		                     params=params)
 	except CommandExecutionError as e:
@@ -249,7 +250,7 @@ def api_request(url,
 				header_dict = _header_dict(project_id, generated_auth_token)
 				return _send_request(url=url,
 				                     header_dict=header_dict,
-				                     method=method,
+				                     method=http_method,
 				                     data=data,
 				                     params=params)
 		raise e

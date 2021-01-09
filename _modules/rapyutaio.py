@@ -127,7 +127,7 @@ def get_packages(phase=(),
 	url = CATALOG_HOST + "/v2/catalog?%s" % urlencode(params, doseq=True)
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="GET",
+		                                                   http_method="GET",
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -212,10 +212,10 @@ def get_package(name=None,
 	}
 	try:
 		return __utils__['rapyutaio.api_request'](url=url,
-	                                              method="GET",
-	                                              params=params,
-	                                              project_id=project_id,
-	                                              auth_token=auth_token)
+		                                          http_method="GET",
+		                                          params=params,
+		                                          project_id=project_id,
+		                                          auth_token=auth_token)
 	except CommandExecutionError as e:
 		log.exception(e)
 		return None
@@ -263,7 +263,7 @@ def delete_package(name=None,
 	}
 	try:
 		__utils__['rapyutaio.api_request'](url=url,
-		                                   method="DELETE",
+		                                   http_method="DELETE",
 		                                   params=data,
 		                                   project_id=project_id,
 		                                   auth_token=auth_token)
@@ -310,7 +310,7 @@ def create_package(source=None,
 	url = CATALOG_HOST + "/serviceclass/add"
 	try:
 		return __utils__['rapyutaio.api_request'](url=url,
-		                                          method="POST",
+		                                          http_method="POST",
 		                                          data=manifest,
 		                                          project_id=project_id,
 		                                          auth_token=auth_token)
@@ -333,7 +333,7 @@ def get_networks(project_id=None,
 	url = CATALOG_HOST + "/routednetwork"
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="GET",
+		                                                   http_method="GET",
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -381,7 +381,7 @@ def get_network(name=None,
 	url = CATALOG_HOST + "/routednetwork/%s" % guid
 	try:
 		return __utils__['rapyutaio.api_request'](url=url,
-		                                          method="GET",
+		                                          http_method="GET",
 		                                          project_id=project_id,
 		                                          auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -408,7 +408,7 @@ def create_network(name,
 	}
 	try:
 		return __utils__['rapyutaio.api_request'](url=url,
-		                                          method="POST",
+		                                          http_method="POST",
 		                                          data=data,
 		                                          project_id=project_id,
 		                                          auth_token=auth_token)
@@ -441,7 +441,7 @@ def delete_network(name=None,
 	url = CATALOG_HOST + "/routednetwork/%s" % guid
 	try:
 		__utils__['rapyutaio.api_request'](url=url,
-		                                   method="DELETE",
+		                                   http_method="DELETE",
 		                                   project_id=project_id,
 		                                   auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -471,7 +471,7 @@ def get_deployments(package_uid=None,
 	url = CATALOG_HOST + "/deployment/list?%s" % urlencode(params, doseq=True)
 	try:
 		return __utils__['rapyutaio.api_request'](url=url,
-		                                          method="GET",
+		                                          http_method="GET",
 		                                          project_id=project_id,
 		                                          auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -500,7 +500,7 @@ def get_deployment(name=None,
 	url = CATALOG_HOST + "/serviceinstance/%s" % id
 	try:
 		return __utils__['rapyutaio.api_request'](url=url,
-		                                          method="GET",
+		                                          http_method="GET",
 		                                          project_id=project_id,
 		                                          auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -611,7 +611,7 @@ def create_deployment(name,
 	url = PROVISION_API_PATH + "/instanceId"
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="PUT",
+		                                                   http_method="PUT",
 		                                                   data=provision_configuration,
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
@@ -664,7 +664,7 @@ def delete_deployment(name=None,
 	url = CATALOG_HOST + "/v2/service_instances/%s" % deployment['deploymentId']
 	try:
 		__utils__['rapyutaio.api_request'](url=url,
-		                                   method="DELETE",
+		                                   http_method="DELETE",
 		                                   params=params,
 		                                   project_id=project_id,
 		                                   auth_token=auth_token)
@@ -683,7 +683,7 @@ def get_dependencies(deployment_id,
 	url = CATALOG_HOST + "/serviceinstance/%s/dependencies" % deployment_id
 	try:
 		return __utils__['rapyutaio.api_request'](url=url,
-		                                          method="GET",
+		                                          http_method="GET",
 		                                          project_id=project_id,
 		                                          auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -711,7 +711,7 @@ def get_manifest(guid,
 	}
 	response = __utils__['http.query'](url=url,
 	                                   header_dict=header_dict,
-	                                   method="GET",
+	                                   http_method="GET",
 	                                   status=True)
 
 	if 'error' in response:
@@ -736,7 +736,7 @@ def get_devices(tgt="*",
 	url = DEVICE_API_PATH
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="GET",
+		                                                   http_method="GET",
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -779,7 +779,7 @@ def get_device(name=None,
 	url = DEVICE_API_PATH + device_id
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="GET",
+		                                                   http_method="GET",
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -846,7 +846,7 @@ def cmd(tgt,
 		url = DEVICE_COMMAND_API_PATH
 		try:
 			response_body = __utils__['rapyutaio.api_request'](url=url,
-			                                                   method="POST",
+			                                                   http_method="POST",
 			                                                   data=command,
 			                                                   project_id=project_id,
 			                                                   auth_token=auth_token)
@@ -891,7 +891,7 @@ def get_metrics(name=None,
 	url = DEVICE_METRIC_API_PATH + device_id
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="GET",
+		                                                   http_method="GET",
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -944,7 +944,7 @@ def add_metrics(name=None,
 	}
 	try:
 		__utils__['rapyutaio.api_request'](url=url,
-		                                   method="POST",
+		                                   http_method="POST",
 		                                   data=data,
 		                                   project_id=project_id,
 		                                   auth_token=auth_token)
@@ -984,7 +984,7 @@ def get_topics(name=None,
 	url = DEVICE_METRIC_API_PATH + device_id
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="GET",
+		                                                   http_method="GET",
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -1007,7 +1007,7 @@ def _label_add(device_id, name, value, project_id, auth_token):
 	}
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="POST",
+		                                                   http_method="POST",
 		                                                   data=data,
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
@@ -1027,7 +1027,7 @@ def _label_update(label_id, name, value, project_id, auth_token):
 	}
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="PUT",
+		                                                   http_method="PUT",
 		                                                   data=data,
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
@@ -1043,7 +1043,7 @@ def _label_delete(label_id, project_id, auth_token):
 	url = DEVICE_LABEL_API_PATH + str(label_id)
 	try:
 		response_body = __utils__['rapyutaio.api_request'](url=url,
-		                                                   method="DELETE",
+		                                                   http_method="DELETE",
 		                                                   project_id=project_id,
 		                                                   auth_token=auth_token)
 	except CommandExecutionError as e:
@@ -1103,7 +1103,7 @@ def test(project_id=None, auth_token=None):
 	Just for testing
 	"""
 	return __utils__['rapyutaio.api_request'](url=DEVICE_API_PATH,
-	                                          method="GET",
+	                                          http_method="GET",
 	                                          project_id=project_id,
 	                                          auth_token=auth_token)
 

@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-This is a simple proxy-minion designed to connect to and communicate with
-the Rapyuta.IO web service
+This is a simple proxy-minion designed to connect to and
+communicate with the Rapyuta.IO web service
 
-run a standalone proxy-minion:
+Run a standalone proxy-minion as a non-root user:
 
-	$ salt-proxy --proxyid=jo-walkthrough \
-	             --config-dir=/srv/salt/_etc/jo-walkthrough/ \
-	             --pid-file=/srv/salt/_etc/jo-walkthrough/pid.pid \
-	             --log-level debug
+	$ salt-proxy --proxyid=myproxy \
+	             --config-dir=/srv/proxy \
+	             --pid-file=/srv/proxy/myproxy.pid \
+	             --log-level=debug
 """
 import logging
 from salt.exceptions import CommandExecutionError
@@ -125,13 +125,14 @@ def ping():
 	Is the Rapyuta.IO online?
 	"""
 	log.debug("rapyutaio proxy ping() called...")
+
 	header_dict = {
 		"Access-Control-Request-Method": "GET",
 		"Access-Control-Request-Headers": "authorization,project",
 	}
 	try:
 		__utils__['rapyutaio.api_request'](url=USER_API_PATH,
-		                                   method="OPTIONS",
+		                                   http_method="OPTIONS",
 		                                   header_dict=header_dict)
 	except CommandExecutionError:
 		return False
