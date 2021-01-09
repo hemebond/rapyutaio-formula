@@ -146,3 +146,8 @@ def shutdown(opts):
 	For this proxy shutdown is a no-op
 	"""
 	log.debug("rapyutaio proxy shutdown() called...")
+
+
+
+def get_reboot_active():
+	return False
