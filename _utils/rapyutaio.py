@@ -1,7 +1,9 @@
 import salt.config
 import salt.utils.sdb
 from datetime import datetime
+import copy
 import logging
+from collections.abc import Mapping
 from salt.matchers.compound_match import match as salt_compound_match
 from salt.exceptions import CommandExecutionError, InvalidConfigError
 
@@ -254,3 +256,56 @@ def api_request(url,
 				                     data=data,
 				                     params=params)
 		raise e
+
+
+
+def deep_merge(tgt, src):
+	"""Deep merge tgt dict with src
+	For each k,v in src: if k doesn't exist in tgt, it is deep copied from
+	src to tgt. Otherwise, if v is a list, tgt[k] is replaced with
+	src[k]. If v is a set, tgt[k] is updated with v, If v is a dict,
+	recursively deep-update it.
+
+	Examples:
+	>>> t = {'name': 'Ferry', 'hobbies': ['programming', 'sci-fi']}
+	>>> print deep_merge(t, {'hobbies': ['gaming']})
+	{'name': 'Ferry', 'hobbies': ['gaming', 'sci-fi']}
+	"""
+	if isinstance(tgt, Mapping):
+		for sk, sv in src.items():
+			tv = tgt.get(sk, None)
+
+			if isinstance(tv, Mapping) and isinstance(sv, Mapping):
+				if sk in tgt:
+					tgt[sk] = deep_merge(tgt[sk], sv)
+				else:
+					tgt[sk] = copy.deepcopy(sv)
+			elif isinstance(tv, list) and isinstance(sv, list):
+				tgt[sk] = deep_merge(tv, sv)
+			elif isinstance(tv, set) and isinstance(sv, set):
+				if sk in tgt:
+					tgt[sk].update(sv.copy())
+				else:
+					tgt[sk] = sv.copy()
+			else:
+				tgt[sk] = copy.copy(sv)
+	elif isinstance(tgt, list):
+		tgt_len = len(tgt)
+
+		for idx in range(len(src)):
+			if src[idx] in (None, "", [], {}):
+				continue
+
+			if idx < tgt_len:
+				if isinstance(tgt[idx], Mapping) and isinstance(src[idx], Mapping):
+					tgt[idx] = deep_merge(tgt[idx], src[idx])
+				elif isinstance(tgt[idx], list) and isinstance(src[idx], list):
+					tgt[idx] = deep_merge(tgt[idx], src[idx])
+				else:
+					tgt[idx] = src[idx]
+			else:
+				tgt.append(src[idx])
+	else:
+		return src
+
+	return tgt

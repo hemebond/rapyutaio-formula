@@ -1,4 +1,5 @@
 import os
+import copy
 import logging
 from urllib.parse import urlencode
 from enum import Enum
@@ -1107,3 +1108,13 @@ def test(project_id=None, auth_token=None):
 	                                          project_id=project_id,
 	                                          auth_token=auth_token)
 
+
+
+def test2():
+	return "Hello"
+
+
+
+def merge(obj_a, obj_b):
+	copied = copy.deepcopy(obj_a)
+	return __utils__['rapyutaio.deep_merge'](copied, obj_b)
