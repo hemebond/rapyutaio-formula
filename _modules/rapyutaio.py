@@ -1110,11 +1110,6 @@ def test(project_id=None, auth_token=None):
 
 
 
-def test2():
-	return "Hello"
-
-
-
 def merge(obj_a, obj_b):
 	copied = copy.deepcopy(obj_a)
 	return __utils__['rapyutaio.deep_merge'](copied, obj_b)

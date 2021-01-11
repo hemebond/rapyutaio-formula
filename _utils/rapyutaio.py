@@ -273,22 +273,38 @@ def deep_merge(tgt, src):
 	"""
 	if isinstance(tgt, Mapping):
 		for sk, sv in src.items():
-			tv = tgt.get(sk, None)
+			if sk[-1] == "+":
+				merge_sublists = True
+				tk = sk[:-1]
+			elif sk[-1] == "-":
+				replace_sublists = True
+				tk = sk[:-1]
+			else:
+				merge_sublists = False
+				replace_sublists = False
+				tk = sk
+
+			tv = tgt.get(tk, None)
 
 			if isinstance(tv, Mapping) and isinstance(sv, Mapping):
 				if sk in tgt:
-					tgt[sk] = deep_merge(tgt[sk], sv)
+					tgt[tk] = deep_merge(tgt[tk], sv)
 				else:
-					tgt[sk] = copy.deepcopy(sv)
+					tgt[tk] = copy.deepcopy(sv)
 			elif isinstance(tv, list) and isinstance(sv, list):
-				tgt[sk] = deep_merge(tv, sv)
+				if merge_sublists:
+					tgt[tk].extend([x for x in sv if x not in tv])
+				elif replace_sublists:
+					tgt[tk] = sv
+				else:
+					tgt[tk] = deep_merge(tv, sv)
 			elif isinstance(tv, set) and isinstance(sv, set):
 				if sk in tgt:
-					tgt[sk].update(sv.copy())
+					tgt[tk].update(sv.copy())
 				else:
-					tgt[sk] = sv.copy()
+					tgt[tk] = sv.copy()
 			else:
-				tgt[sk] = copy.copy(sv)
+				tgt[tk] = copy.copy(sv)
 	elif isinstance(tgt, list):
 		tgt_len = len(tgt)
 
@@ -297,9 +313,7 @@ def deep_merge(tgt, src):
 				continue
 
 			if idx < tgt_len:
-				if isinstance(tgt[idx], Mapping) and isinstance(src[idx], Mapping):
-					tgt[idx] = deep_merge(tgt[idx], src[idx])
-				elif isinstance(tgt[idx], list) and isinstance(src[idx], list):
+				if isinstance(tgt[idx], (Mapping, list)) and isinstance(src[idx], (Mapping, list)):
 					tgt[idx] = deep_merge(tgt[idx], src[idx])
 				else:
 					tgt[idx] = src[idx]
