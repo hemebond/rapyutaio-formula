@@ -729,7 +729,7 @@ def get_manifest(guid,
 # Devices
 #
 # -----------------------------------------------------------------------------
-def get_devices(tgt="*",
+def get_devices(tgt=None,
                 project_id=None,
                 auth_token=None):
 	"""
@@ -744,15 +744,17 @@ def get_devices(tgt="*",
 		log.exception(e)
 		return None
 
-	# filter the list of devices
-	devices = [
-		device
-		for device
-		in response_body['response']['data']
-		if __utils__['rapyutaio.match'](tgt, device)
-	]
-
-	return devices
+	if tgt is not None:
+		# filter the list of devices
+		return [
+			device
+			for device
+			in response_body['response']['data']
+			if __utils__['rapyutaio.match'](tgt, device)
+		]
+	else:
+		# return all devices
+		return response_body['response']['data']
 
 
 

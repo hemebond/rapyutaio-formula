@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Manage Rapyuta IO Resources
-===================
-
-Manage Rapyuta IO resources.
 
 Specify credentials either in a pillar file or
 in the minion's config file:
@@ -36,14 +33,11 @@ config:
 			- profile: myprofile
 """
 
-# Import Python Libs
 from __future__ import absolute_import, print_function, unicode_literals
-
-import os
 import logging
-
 from salt.exceptions import CommandExecutionError
-# from salt.exceptions import CommandExecutionError, SaltInvocationError
+
+
 
 log = logging.getLogger(__name__)
 
@@ -68,12 +62,69 @@ def __virtual__():
 def package_present(name,
                     source=None,
                     template=None,
-                    context=None,
                     defaults=None,
+                    context=None,
                     contents=None,
                     show_changes=True,
                     saltenv="base"):
 	"""
+	Ensure that a package exists in the project catalog with matching definition.
+
+	name
+		Name of the package
+
+	source
+		Source file to upload to the catalog. This file should be hosted
+		on the Salt Master server (``salt://``).
+
+	template
+		If this setting is supplied, the named templating engine will be used to
+		render the source file. The following templates are supported:
+
+		- :mod:`cheetah<salt.renderers.cheetah>`
+		- :mod:`genshi<salt.renderers.genshi>`
+		- :mod:`jinja<salt.renderers.jinja>`
+		- :mod:`mako<salt.renderers.mako>`
+		- :mod:`py<salt.renderers.py>`
+		- :mod:`wempy<salt.renderers.wempy>`
+
+	defaults
+		Default context passed to the template.
+
+	context
+		Overrides default context variables passed to the template.
+
+	contents
+		Specify the contents of the manifest as YAML. Can be used in combination with
+		``source`` to override parts of the configuration. For example if the source
+		file contained this:
+
+		.. code-block:: json
+
+			{
+				"name": "Test Package",
+				"packageVersion": "v1.0.0"
+			}
+
+		and the state contained this:
+
+		.. code-block:: yaml
+
+			My Test Package:
+			  - source: salt://test.json
+			  - contents:
+			      packageVersion: v1.0.1
+
+		the resulting manifest would be:
+
+		.. code-block:: yaml
+
+			name: Test Package
+			packageVersion: v1.0.1
+
+	show_changes
+		Output a unified diff of the old manifest and new manifest. If ``False``
+		return a boolean if any changes were made.
 	"""
 	ret = {
 		"name": name,
@@ -82,32 +133,38 @@ def package_present(name,
 		"comment": ""
 	}
 
+	new_manifest = {}
+
 	#
 	# Get the content of the new manifest
 	#
-	if contents is None:
-		if source is None:
-			ret['comment'] = "package_present requires either 'source' or 'contents'"
+	if source is not None:
+		source_contents = __salt__['cp.get_file_str'](source, saltenv=saltenv)
+
+		if source_contents is False:
+			ret['comment'] = "Source file not found: {}".format(source)
 			return ret
 
-		contents = __salt__['cp.get_file_str'](source, saltenv=saltenv)
-
 		if template is not None:
-			contents = __salt__["file.apply_template_on_contents"](
-				contents, template, context, defaults, saltenv
+			source_contents = __salt__["file.apply_template_on_contents"](
+				source_contents, template, context, defaults, saltenv
 			)
-			log.debug(contents)
 
 		try:
-			new_manifest = __utils__['yaml.load'](contents)
+			new_manifest = __utils__['yaml.load'](source_contents)
 		except Exception:
 			try:
-				new_manifest = __utils__['json.loads'](contents)
+				new_manifest = __utils__['json.loads'](source_contents)
 			except Exception:
 				ret['comment'] = "Manifest source must be a JSON or YAML file"
 				return ret
-	else:
-		new_manifest = contents
+
+	if contents is not None:
+		new_manifest = __utils__['rapyutaio.deep_merge'](new_manifest, contents)
+
+	if new_manifest == {}:
+		ret['comment'] = "package_present requires either 'source' or 'contents'"
+		return ret
 
 	#
 	# Allow setting the name via the state
@@ -212,6 +269,12 @@ def package_present(name,
 def package_absent(name, version):
 	"""
 	Removes the version of a package if it exists.
+
+	name
+		Name of the package
+
+	version
+		Version of the package
 	"""
 	ret = {
 		"name": name,
@@ -263,8 +326,50 @@ def package_absent(name, version):
 def network_present(name,
                     runtime,
                     ros_distro,
-                    parameters=None):
+                    device=None,
+                    interface=None,
+                    restart_policy=None):
 	"""
+	Ensure a ROS routed network exists with matching definition.
+
+	name
+		Name of the network
+
+	ros_distro
+		ROS distribution to use for the network, Kinetic or Melodic, based
+		on the version of the components it will be binding to.
+
+	runtime
+		Either ``cloud`` or ``device``
+
+		.. code-block:: yaml
+
+			Ensure Demo Cloud network exists:
+			  rapyutaio.network_present:
+			    - name: cloud_demo
+			    - ros_distro: kinetic
+			    - runtime: cloud
+
+			Ensure Demo Device network exists:
+			  rapyutaio.network_present:
+			    - name: device_demo
+			    - runtime: device
+			    - rosDistro: melodic
+			    - interface: enp2s0
+			    - device: robot1
+			    - restart_policy: no
+
+	device
+		Name of the device to use for a device routed network.
+
+	interface
+		Network interface to bind to with a device routed network
+
+	restart_policy
+		Restart policy for the device routed network. One of these values:
+			- no
+			- always
+			- on-failure
 	"""
 	ret = {
 		"name": name,
@@ -279,8 +384,21 @@ def network_present(name,
 		"name": name,
 		"runtime": runtime,
 		"rosDistro": ros_distro,
-		"parameters": parameters or {},
+		"parameters": {},
 	}
+
+	if runtime == "device":
+		device_obj = __salt__['rapyuta.device'](name=device)
+
+		if device_obj is None:
+			ret['comment'] = f"Device {device} not found"
+			return ret
+
+		parameters = {
+			"NETWORK_INTERFACE": interface,
+			"device_id": device_obj['uuid'],
+			"restart_policy": restart_policy,
+		}
 
 	if old_network:
 		log.debug(old_network)
@@ -437,11 +555,11 @@ def deployment_present(name,
 		return ret
 
 	try:
-		deployment = __salt__['rapyutaio.create_deployment'](name=name,
-		                                                     package_name=package_name,
-		                                                     package_version=package_version,
-		                                                     parameters=parameters,
-		                                                     dependencies=dependencies)
+		__salt__['rapyutaio.create_deployment'](name=name,
+		                                        package_name=package_name,
+		                                        package_version=package_version,
+		                                        parameters=parameters,
+		                                        dependencies=dependencies)
 	except CommandExecutionError as e:
 		ret['result'] = False
 		ret['comment'] = str(e)
@@ -474,7 +592,7 @@ def deployment_absent(name):
 		ret['comment'] = "Deployment '{0}' would be removed".format(name)
 		return ret
 
-	response = __salt__['rapyutaio.delete_deployment'](name=name)
+	__salt__['rapyutaio.delete_deployment'](name=name)
 
 	ret['result'] = True
 	ret['changes']['removed'] = name

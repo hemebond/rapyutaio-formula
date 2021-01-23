@@ -99,14 +99,19 @@ def grains():
 	log.debug("rapyutaio proxy grains() called...")
 	global GRAINS_CACHE
 	if not GRAINS_CACHE:
-		grains = __utils__['rapyutaio.api_request'](USER_API_PATH)
+		user_grains = __utils__['rapyutaio.api_request'](USER_API_PATH)
 
-		org_id = grains['organization']['guid']
-		grains['organization'] = __utils__['rapyutaio.api_request'](ORG_API_PATH.format(org_id=org_id))
+		org_id = user_grains['organization']['guid']
+		org_grains = __utils__['rapyutaio.api_request'](ORG_API_PATH.format(org_id=org_id))
 
-		GRAINS_CACHE = grains
+		GRAINS_CACHE = {
+			"user": user_grains,
+			"organisation": org_grains,
+		}
 
-	return {'rapyutaio': GRAINS_CACHE}
+	return {
+		"rapyutaio": GRAINS_CACHE
+	}
 
 
 
